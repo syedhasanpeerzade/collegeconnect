@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Event Applications - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="container">
+    <div class="page-head">
+      <div><h1>My Event Applications</h1><div class="sub">Track your proposals through HOD approval, then publish your event.</div></div>
+      <a class="btn" href="/event-request.html">New Application</a>
+    </div>
+    <div id="content"><div class="loading">Loading applications...</div></div>
+  </div>
+
+  <div class="modal-overlay" id="detail-modal" style="display:none">
+    <div class="modal" style="max-width:680px;max-height:88vh;overflow:auto">
+      <div id="detail-body"></div>
+      <div class="modal-actions" id="detail-actions"></div>
+      <button class="btn btn-secondary" id="close-detail" style="display:none">Close</button>
+    </div>
+  </div>
+
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      const user = Auth.requireRole(['STUDENT', 'ORGANIZER', 'ADMIN']);
+      if (!user) return;
+      const box = document.getElementById('content');
+      const modal = document.getElementById('detail-modal');
+      const detailBody = document.getElementById('detail-body');
+      const detailActions = document.getElementById('detail-actions');
+      document.getElementById('close-detail') || null;
+
+      const params = new URLSearchParams(location.search);
+      if (params.get('submitted')) {
+        UI.toast('Application submitted successfully. Your event is awaiting HOD approval.', 'success');
+      }
+
+      // HOD-style status labels
+      function appStatus(s) {
+        if (s === 'PENDING' || s === 'UNDER_REVIEW') return '<span class="badge badge-amber">&#128993; Pending HOD Approval</span>';
+        if (s === 'APPROVED' || s === 'PUBLISHED') return '<span class="badge badge-green">&#128994; Approved</span>';
+        if (s === 'REJECTED') return '<span class="badge badge-red">&#128308; Rejected</span>';
+        if (s === 'CHANGES_REQUESTED') return UI.statusBadge(s);
+        return UI.statusBadge(s);
+      }
+
+      async function load() {
+        box.innerHTML = UI.loadingBox('Loading applications...');
+        try {
+          const res = await API.get('/events/requests?mine=1');
+          const rows = res.data || [];
+          if (!rows.length) {
+            box.innerHTML = UI.empty('No applications yet', 'Click "New Application" to propose your first event.');
+            return;
+          }
+          box.innerHTML = `<div class="table-wrap"><table>
+            <thead><tr><th>Event</th><th>Category</th><th>Proposed date</th><th>Status</th><th>HOD remarks</th><th></th></tr></thead>
+            <tbody>${rows.map((r) => `
+              <tr>
+                <td data-label="Event"><b>${UI.esc(r.title)}</b><br><span style="font-size:12.5px;color:var(--muted)" class="mono">${UI.esc(r.public_id)}</span></td>
+                <td data-label="Category">${UI.categoryLabel(r.category)}</td>
+                <td data-label="Date">${UI.fmtDate(r.proposed_date)}</td>
+                <td data-label="Status">${appStatus(r.status)}</td>
+                <td data-label="Remarks" style="max-width:240px">${r.status === 'REJECTED' && r.review_remarks ? `<span style="color:var(--danger)">${UI.esc(r.review_remarks)}</span>` : UI.esc(r.review_remarks || '-')}</td>
+                <td data-label="">
+                  <button class="btn btn-sm btn-secondary" data-detail="${r.id}">Open</button>
+                  ${(r.status === 'APPROVED' && r.event_id) ? '<button class="btn btn-sm" data-publish="' + r.id + '">Organize &amp; Publish</button>' : ''}
+                </td>
+              </tr>`).join('')}</tbody>
+          </table></div>`;
+
+          box.querySelectorAll('[data-detail]').forEach((b) => b.addEventListener('click', () => openDetail(b.dataset.detail)));
+          box.querySelectorAll('[data-publish]').forEach((b) => b.addEventListener('click', () => publishFlow(b.dataset.publish)));
+        } catch (err) {
+          box.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        }
+      }
+
+      async function openDetail(id) {
+        try {
+          const res = await API.get(`/events/requests/${id}`);
+          const r = res.data;
+          detailBody.innerHTML = `
+            <h3 style="margin-top:0">${UI.esc(r.title)} ${appStatus(r.status)}</h3>
+            <dl class="kv">
+              <dt>Application ID</dt><dd class="mono">${UI.esc(r.public_id)}</dd>
+              <dt>Category</dt><dd>${UI.categoryLabel(r.category)} (${UI.categoryLabel(r.event_type)})</dd>
+              <dt>Date &amp; time</dt><dd>${UI.fmtDate(r.proposed_date)}, ${UI.fmtTime(r.start_time)} - ${UI.fmtTime(r.end_time)}</dd>
+              <dt>Venue</dt><dd>${UI.esc(r.venue)}</dd>
+              <dt>Expected</dt><dd>${r.expected_participants} participants</dd>
+              ${r.club_name ? `<dt>Club</dt><dd>${UI.esc(r.club_name)}</dd>` : ''}
+              ${r.department_code ? `<dt>Department</dt><dd>${UI.esc(r.department_code)}</dd>` : ''}
+              ${r.required_facilities ? `<dt>Required resources</dt><dd>${UI.esc(r.required_facilities)}</dd>` : ''}
+            </dl>
+            <h4 style="margin:14px 0 4px">Description</h4>
+            <p style="white-space:pre-wrap">${UI.esc(r.description)}</p>
+            ${r.objectives ? `<h4 style="margin:14px 0 4px">Objectives</h4><p style="white-space:pre-wrap">${UI.esc(r.objectives)}</p>` : ''}
+            ${r.status === 'REJECTED' && r.review_remarks ? `<div class="error-box"><b>HOD's reason for rejection:</b><br>${UI.esc(r.review_remarks)}</div>` : ''}
+            ${r.status === 'APPROVED' ? '<div class="ok-box">&#127881; Approved by the HOD! Click "Organize &amp; Publish" to finalize details and make the event live for registrations.</div>' : ''}
+            <h4 style="margin:14px 0 4px">Timeline</h4>
+            <ul class="timeline">
+              ${r.history.map((h) => `
+                <li><div class="tl-head">${h.old_status ? UI.categoryLabel(h.old_status) + ' &rarr; ' : ''}${UI.categoryLabel(h.new_status)}
+                  <span class="tl-time">${UI.fmtDateTime(h.created_at)}</span></div>
+                  ${h.remarks ? `<div class="tl-note">${UI.esc(h.remarks)}</div>` : ''}</li>`).join('')}
+            </ul>`;
+          detailActions.innerHTML = `
+            ${(r.status === 'APPROVED' && r.event_id) ? '<button class="btn" id="pub-btn">Organize &amp; Publish</button>' : ''}
+            <button class="btn btn-secondary" id="close-detail2">Close</button>`;
+          document.getElementById('close-detail2').addEventListener('click', () => { modal.style.display = 'none'; });
+          const pub = document.getElementById('pub-btn');
+          if (pub) pub.addEventListener('click', () => { modal.style.display = 'none'; publishFlow(id); });
+          modal.style.display = 'flex';
+        } catch (err) { UI.toast(err.message, 'error'); }
+      }
+
+      // Finalize details then publish (only for APPROVED applications)
+      async function publishFlow(id) {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.innerHTML = `
+          <div class="modal" role="dialog" aria-modal="true" style="max-width:520px">
+            <h3>Publish event details</h3>
+            <p class="hint">These details become the live event page.</p>
+            <div class="form-grid">
+              <div class="form-row">
+                <div class="field"><label>Event date *</label><input type="date" id="pf-date" required></div>
+                <div class="field"><label>Venue *</label><input id="pf-venue" required placeholder="e.g. Seminar Hall A"></div>
+              </div>
+              <div class="form-row-3">
+                <div class="field"><label>Start *</label><input type="time" id="pf-start" required value="10:00"></div>
+                <div class="field"><label>End *</label><input type="time" id="pf-end" required value="17:00"></div>
+                <div class="field"><label>Max participants *</label><input type="number" id="pf-seats" min="1" value="100" required></div>
+              </div>
+              <div class="field-error" id="pf-err" style="display:none"></div>
+            </div>
+            <div class="modal-actions">
+              <button class="btn btn-secondary" data-act="cancel">Cancel</button>
+              <button class="btn" data-act="ok">Publish event</button>
+            </div>
+          </div>`;
+        document.body.appendChild(overlay);
+        const close = () => overlay.remove();
+        const done = (res) => {
+          close();
+          UI.toast(res.message, 'success');
+          load();
+        };
+        overlay.addEventListener('click', async (e) => {
+          if (e.target === overlay || e.target.closest('[data-act="cancel"]')) { close(); return; }
+          if (!e.target.closest('[data-act="ok"]')) return;
+          const val = (sel) => document.querySelector(sel).value.trim();
+          const payload = {
+            event_date: val('#pf-date'), venue: val('#pf-venue'),
+            start_time: val('#pf-start'), end_time: val('#pf-end'), max_participants: val('#pf-seats'),
+          };
+          if (!payload.event_date || !payload.venue || !payload.start_time || !payload.end_time || !payload.max_participants) {
+            const err = document.getElementById('pf-err');
+            err.textContent = 'All fields are required.';
+            err.style.display = 'block';
+            return;
+          }
+          try { done(await API.put(`/events/requests/${id}/publish`, payload)); }
+          catch (err) {
+            const errEl = document.getElementById('pf-err');
+            errEl.textContent = err.message;
+            errEl.style.display = 'block';
+          }
+        });
+      }
+
+      load();
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Profile - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/social.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+
+  <div class="social-shell">
+    <aside class="social-sidebar"><nav class="snav" id="snav"></nav></aside>
+
+    <main>
+      <div id="profile-box"><div class="loading">Loading profile...</div></div>
+
+      <div class="profile-tabs" id="profile-tabs" style="display:none">
+        <button data-atab="posts" class="active">Posts</button>
+        <button data-atab="projects">Projects</button>
+        <button data-atab="achievements">Achievements</button>
+        <button data-atab="settings" id="settings-tab-btn" style="display:none">Settings</button>
+      </div>
+
+      <div id="tab-posts"></div>
+      <div id="tab-projects" style="display:none"></div>
+      <div id="tab-achievements" style="display:none"><div class="loading">Loading achievements...</div></div>
+      <div id="tab-settings" style="display:none"></div>
+      <div class="load-more-wrap"><button class="btn btn-secondary" id="load-more" style="display:none">Load more</button></div>
+    </main>
+
+    <aside class="social-rail"></aside>
+  </div>
+
+  <nav class="mobile-tabbar" id="tabbar"></nav>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/social.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      Social.chrome('/profile.html');
+      const viewer = Auth.user();
+      const params = new URLSearchParams(location.search);
+      const viewId = parseInt(params.get('id'), 10) || (viewer ? viewer.id : 0);
+      if (!viewId) { location.href = '/login.html?next=%2Fprofile.html'; return; }
+
+      const box = document.getElementById('profile-box');
+      let prof;
+      try {
+        const res = await API.get(`/social/users/${viewId}/social`);
+        prof = res.data;
+      } catch (err) {
+        box.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        return;
+      }
+
+      const isMe = prof.is_me;
+      document.title = `${prof.full_name} - CollegeConnect`;
+      document.getElementById('settings-tab-btn').style.display = isMe ? '' : 'none';
+
+      /* ---------- Header ---------- */
+      const badge = prof.verified && ['college', 'club'].includes(prof.account_type)
+        ? `<span class="official-chip">&#10003; ${prof.account_type === 'club' ? 'Verified Club' : 'Official'}</span>`
+        : '';
+      const sub = [prof.dept_name ? `${prof.dept_code} - ${prof.dept_name}` : '', prof.year ? `Year ${prof.year}` : '', prof.student_id ? UI.esc(prof.student_id) : '']
+        .filter(Boolean).join(' · ');
+      const ava = prof.avatar_path
+        ? `<img class="profile-ava" src="${UI.esc(prof.avatar_path)}" alt="">`
+        : `<span class="profile-ava">${UI.esc(prof.full_name.charAt(0).toUpperCase())}</span>`;
+      const skills = String(prof.skills || '').split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
+      const actions = isMe
+        ? '<button class="btn" id="edit-profile-btn">Edit profile</button>'
+        : (viewer ? `
+            <button class="btn ${prof.viewer_follows ? 'btn-secondary' : ''}" id="follow-btn" data-following="${prof.viewer_follows ? '1' : ''}">${prof.viewer_follows ? 'Following &#10003;' : 'Follow'}</button>` : '');
+      box.innerHTML = `
+        <div class="card fade-in" style="overflow:hidden;margin-bottom:16px">
+          <div class="profile-cover" id="profile-cover"></div>
+          <div class="profile-head">
+            <div class="profile-ava-row">
+              ${ava}
+              <div class="profile-meta">
+                <h1>${UI.esc(prof.full_name)} ${badge}</h1>
+                <div class="profile-sub">${sub || UI.categoryLabel(prof.account_type)}</div>
+                <div class="profile-stats">
+                  <span class="pstat" id="stat-posts" role="button" tabindex="0"><b>${prof.stats.posts}</b><span>Posts</span></span>
+                  <span class="pstat" id="stat-followers" role="button" tabindex="0" style="cursor:pointer"><b>${prof.stats.followers}</b><span>Followers</span></span>
+                  <span class="pstat" id="stat-following" role="button" tabindex="0" style="cursor:pointer"><b>${prof.stats.following}</b><span>Following</span></span>
+                </div>
+                ${prof.bio ? `<div class="profile-bio">${UI.esc(prof.bio)}</div>` : (isMe ? '<div class="profile-bio" style="color:var(--muted)">No bio yet — tell campus about yourself.</div>' : '')}
+                ${skills.length ? `<div class="chip-row">${skills.map((s) => `<span class="skill-chip">${UI.esc(s)}</span>`).join('')}</div>` : ''}
+                <div class="profile-actions">${actions}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="profile-completion" style="display:none"></div>`;
+
+      if (prof.cover_path) document.getElementById('profile-cover').style.backgroundImage = `url('${prof.cover_path}')`;
+
+      /* ---------- Profile completion indicator ---------- */
+      const completionBox = document.getElementById('profile-completion');
+      if (prof.is_me) {
+        (async () => {
+          try {
+            const res = await API.get(`/social/users/${viewId}/completion`);
+            const c = res.data || {};
+            completionBox.innerHTML = `
+              <div class="profile-completion">
+                <div class="pc-head">
+                  <span class="pc-label">Profile</span>
+                  <span class="pc-pct" data-pc-pct>${c.pct}%</span>
+                </div>
+                <div class="pc-bar"><span data-pc-bar></span></div>
+                <div class="pc-body" data-pc-body></div>
+              </div>`;
+            completionBox.style.display = '';
+            const bar = completionBox.querySelector('[data-pc-bar]');
+            bar.style.width = `${c.pct}%`;
+            const body = completionBox.querySelector('[data-pc-body]');
+            body.innerHTML = (c.suggestions || []).map((s) => `
+              <div class="pc-item" data-pc-item>
+                <span class="pc-check">${s.done ? '&#10003;' : ''}</span>
+                <div class="pc-text"><b>${UI.esc(s.label)}</b><span>${s.done ? 'Done' : 'Tap to add'}</span></div>
+              </div>`).join('');
+            completionBox.querySelector('[data-pc-pct]').parentElement.classList.toggle('done', c.pct >= 100);
+            body.querySelectorAll('[data-pc-item]').forEach((item) => {
+              item.addEventListener('click', () => {
+                const label = item.querySelector('.pc-text b').textContent;
+                if (label === 'Add a profile photo') {
+                  // Re-open the same edit-profile modal the page already builds.
+                  document.getElementById('edit-profile-btn') && document.getElementById('edit-profile-btn').click();
+                } else if (label === 'Add a short bio' || label === 'Add a few skills' || label === 'Add your projects') {
+                  document.getElementById('edit-profile-btn') && document.getElementById('edit-profile-btn').click();
+                } else if (label === 'Share your first post') {
+                  location.href = '/feed.html';
+                } else if (label === 'Follow a few people') {
+                  location.href = '/feed.html';
+                }
+              });
+            });
+          } catch (_e) { /* completion is best-effort */ }
+        })();
+      }
+
+      /* ---------- Follow ---------- */
+      const followBtn = document.getElementById('follow-btn');
+      if (followBtn) {
+        followBtn.addEventListener('click', async () => {
+          try {
+            const res = await API.put(`/social/users/${viewId}/follow`);
+            followBtn.dataset.following = res.data.following ? '1' : '';
+            followBtn.classList.toggle('btn-secondary', res.data.following);
+            followBtn.innerHTML = res.data.following ? 'Following &#10003;' : 'Follow';
+            const fEl = document.querySelector('#stat-followers b');
+            fEl.textContent = Number(fEl.textContent) + (res.data.following ? 1 : -1);
+            UI.toast(res.message, 'success');
+          } catch (err) { UI.toast(err.message, 'error'); }
+        });
+      }
+
+      /* ---------- Followers / Following lists ---------- */
+      async function openPersonList(kind) {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.innerHTML = `
+          <div class="modal" role="dialog" aria-modal="true" style="max-width:440px;max-height:70vh;overflow:auto">
+            <h3 style="margin-top:0">${kind === 'followers' ? 'Followers' : 'Following'}</h3>
+            <div id="pl-list"><div class="loading">Loading...</div></div>
+            <div class="modal-actions"><button class="btn btn-secondary" data-act="cancel">Close</button></div>
+          </div>`;
+        document.body.appendChild(overlay);
+        const close = () => overlay.remove();
+        overlay.addEventListener('click', (e) => { if (e.target === overlay || e.target.closest('[data-act="cancel"]')) close(); });
+        const listEl = overlay.querySelector('#pl-list');
+        try {
+          const res = await API.get(`/social/users/${viewId}/${kind}`);
+          const people = res.data || [];
+          if (!people.length) {
+            listEl.innerHTML = `<div class="ri-meta" style="padding:8px 2px">${kind === 'followers' ? 'No followers yet.' : 'Not following anyone yet.'}</div>`;
+          } else {
+            listEl.innerHTML = people.map((p) => `
+              <a class="suggest-row" href="/profile.html?id=${p.id}" style="text-decoration:none;color:inherit;padding:8px;border-radius:10px">
+                ${p.avatar_path ? `<img class="post-avatar avatar-sm" src="${UI.esc(p.avatar_path)}" alt="">`
+                  : `<span class="post-avatar avatar-sm">${UI.esc((p.full_name || '?').charAt(0).toUpperCase())}</span>`}
+                <span class="sr-main">
+                  <span class="pb-name" style="font-size:13.5px">${UI.esc(p.full_name)}
+                    ${p.verified && ['college','club'].includes(p.account_type) ? '<span class="vbadge">&#10003;</span>' : ''}</span>
+                  <div class="ri-meta">${UI.esc(p.dept_code || (p.account_type !== 'student' ? 'Official account' : 'Student'))}${p.year ? ` &middot; Year ${p.year}` : ''}</div>
+                </span>
+              </a>`).join('');
+          }
+        } catch (err) {
+          listEl.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        }
+      }
+      document.getElementById('stat-followers').addEventListener('click', () => openPersonList('followers'));
+      document.getElementById('stat-following').addEventListener('click', () => openPersonList('following'));
+
+      /* ---------- Edit profile (own only) ---------- */
+      const editBtn = document.getElementById('edit-profile-btn');
+      if (editBtn) {
+        editBtn.addEventListener('click', () => {
+          const overlay = document.createElement('div');
+          overlay.className = 'modal-overlay';
+          overlay.innerHTML = `
+            <div class="modal" role="dialog" aria-modal="true" style="max-width:520px">
+              <h3>Edit profile</h3>
+              <div class="edit-grid">
+                <div style="grid-column:1/-1">
+                  <label for="ep-bio">Bio</label>
+                  <textarea id="ep-bio" rows="3" maxlength="1000">${UI.esc(prof.bio || '')}</textarea>
+                </div>
+                <div style="grid-column:1/-1">
+                  <label for="ep-skills">Skills (comma separated)</label>
+                  <input type="text" id="ep-skills" maxlength="1000" value="${UI.esc(prof.skills || '')}">
+                </div>
+                <div style="grid-column:1/-1">
+                  <label for="ep-projects">Projects (one per line)</label>
+                  <textarea id="ep-projects" rows="4" maxlength="2000">${UI.esc(prof.projects || '')}</textarea>
+                </div>
+                <div style="grid-column:1/-1">
+                  <label for="ep-avatar">Profile photo</label>
+                  <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
+                    <input type="file" id="ep-avatar" accept="image/*" style="flex:1;min-width:0">
+                    ${prof.avatar_path
+                      ? `<button class="btn btn-danger btn-sm" data-remove-avatar>Remove Photo</button>`
+                      : ''}
+                  </div>
+                </div>
+                <div style="grid-column:1/-1">
+                  <label for="ep-cover">Cover photo</label>
+                  <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
+                    <input type="file" id="ep-cover" accept="image/*" style="flex:1;min-width:0">
+                    ${prof.cover_path
+                      ? `<button class="btn btn-danger btn-sm" data-remove-cover>Remove Cover Photo</button>`
+                      : ''}
+                  </div>
+                </div>
+              </div>
+              <div class="modal-actions">
+                <button class="btn btn-secondary" data-act="cancel">Cancel</button>
+                <button class="btn" data-act="save">Save</button>
+              </div>
+            </div>`;
+          document.body.appendChild(overlay);
+
+          /* Remove buttons (independent, two-step confirm) */
+          overlay.querySelectorAll('[data-remove-avatar]').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+              const ok = await UI.confirm('Remove your profile photo?', { title: 'Remove profile photo', confirmText: 'Remove photo' });
+              if (!ok) return;
+              try {
+                await API.delete('/social/users/' + viewer.id + '/photos/avatar');
+                UI.toast('Profile photo removed', 'success');
+                location.reload();
+              } catch (err) {
+                UI.toast(err.message, 'error');
+              }
+            });
+          });
+          overlay.querySelectorAll('[data-remove-cover]').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+              const ok = await UI.confirm('Remove your cover photo?', { title: 'Remove cover photo', confirmText: 'Remove cover' });
+              if (!ok) return;
+              try {
+                await API.delete('/social/users/' + viewer.id + '/photos/cover');
+                UI.toast('Cover photo removed', 'success');
+                location.reload();
+              } catch (err) {
+                UI.toast(err.message, 'error');
+              }
+            });
+          });
+
+          overlay.addEventListener('click', async (e) => {
+            if (e.target === overlay || e.target.closest('[data-act="cancel"]')) overlay.remove();
+            if (e.target.closest('[data-act="save"]')) {
+              const btn = e.target.closest('[data-act="save"]');
+              btn.disabled = true;
+              const fd = new FormData();
+              fd.append('bio', overlay.querySelector('#ep-bio').value);
+              fd.append('skills', overlay.querySelector('#ep-skills').value);
+              fd.append('projects', overlay.querySelector('#ep-projects').value);
+              const av = overlay.querySelector('#ep-avatar').files[0];
+              const cv = overlay.querySelector('#ep-cover').files[0];
+              if (av) fd.append('avatar', av);
+              if (cv) fd.append('cover', cv);
+              try {
+                const res = await API.putForm(`/social/users/${viewer.id}/social`, fd);
+                UI.toast(res.message || 'Profile updated', 'success');
+                overlay.remove();
+                location.reload();
+              } catch (err) {
+                UI.toast(err.message, 'error');
+                btn.disabled = false;
+              }
+            }
+          });
+        });
+      }
+
+      /* ---------- Tabs ---------- */
+      const tabsEl = document.getElementById('profile-tabs');
+      tabsEl.style.display = 'flex';
+      let page = 1;
+      let hasMore = false;
+      const postsEl = document.getElementById('tab-posts');
+      const loadMoreBtn = document.getElementById('load-more');
+
+      async function loadPosts(reset = true) {
+        if (reset) { page = 1; postsEl.innerHTML = '<div class="loading">Loading posts...</div>'; }
+        try {
+          const res = await API.get(`/social/feed?author_id=${viewId}&page=${page}`);
+          hasMore = res.data.hasMore;
+          if (reset && !res.data.rows.length) {
+            postsEl.innerHTML = UI.empty(isMe ? 'You have not posted yet' : 'No posts yet',
+              isMe ? 'Head to the Feed and share something with campus!' : '');
+          } else {
+            postsEl.innerHTML = (reset ? '' : postsEl.innerHTML) + res.data.rows.map((p) => Social.card(p, viewer)).join('');
+          }
+          loadMoreBtn.style.display = hasMore ? 'inline-flex' : 'none';
+        } catch (err) {
+          postsEl.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        }
+      }
+      loadMoreBtn.addEventListener('click', () => { page += 1; loadPosts(false); });
+      Social.bindInteractions(postsEl, { onChange: () => loadPosts() });
+      loadPosts();
+
+      function renderProjects() {
+        const el = document.getElementById('tab-projects');
+        const lines = String(prof.projects || '').split('\n').map((s) => s.trim()).filter(Boolean);
+        if (!lines.length) {
+          el.innerHTML = UI.empty(isMe ? 'No projects added yet' : 'No projects yet',
+            isMe ? 'Use "Edit profile" to add your projects — one per line.' : '');
+          return;
+        }
+        el.innerHTML = `<div class="card" style="padding:16px">${lines.map((l) => `
+          <div style="display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--line-soft);font-size:14.5px">
+            <span>&#128640;</span><span>${UI.esc(l)}</span>
+          </div>`).join('')}</div>`;
+      }
+
+      async function loadAchievements() {
+        const el = document.getElementById('tab-achievements');
+        try {
+          const res = await API.get('/achievements');
+          const mine = (res.data || []).filter((a) => {
+            const winnerIds = String(a.winner_user_ids || '').split(',').map((s) => s.trim());
+            return Number(a.created_by) === viewId || winnerIds.includes(String(viewId));
+          });
+          if (!mine.length) { el.innerHTML = UI.empty('No achievements yet', 'Verified Hall of Fame achievements for this user appear here.'); return; }
+          el.innerHTML = mine.map((a) => `
+            <div class="card" style="padding:14px;margin-bottom:12px">
+              <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+                <a href="/achievement-details.html?id=${a.id}" style="font-weight:700">&#127942; ${UI.esc(a.title)}</a>
+                ${UI.statusBadge(a.position || a.verification_status)}
+              </div>
+              <div style="font-size:13px;color:var(--muted);margin-top:4px">${UI.esc(a.competition_name || '')} · ${UI.esc(String(a.achievement_year || ''))}</div>
+            </div>`).join('');
+        } catch (err) {
+          el.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        }
+      }
+
+      function renderSettings() {
+        const el = document.getElementById('tab-settings');
+        el.innerHTML = `
+          <div class="card" style="padding:18px;margin-bottom:14px">
+            <h3 style="margin-top:0">Account details</h3>
+            <dl class="kv">
+              <dt>Full name</dt><dd>${UI.esc(prof.full_name)}</dd>
+              <dt>Account type</dt><dd>${UI.categoryLabel(prof.account_type)} ${prof.verified && prof.account_type !== 'student' ? '&#10003;' : ''}</dd>
+              ${prof.student_id ? `<dt>ID</dt><dd>${UI.esc(prof.student_id)}</dd>` : ''}
+              <dt>Member since</dt><dd>${UI.fmtDate(prof.created_at)}</dd>
+            </dl>
+          </div>
+          <div class="card" style="padding:18px;margin-bottom:14px">
+            <h3 style="margin-top:0">Appearance</h3>
+            <p style="font-size:13px;color:var(--muted);margin-top:0">Choose how College Connect looks on this device.</p>
+            <div style="display:flex;gap:10px">
+              <button class="btn ${UI.theme.get() === 'light' ? '' : 'btn-secondary'}" data-theme-set="light">&#9728;&#65039; Light</button>
+              <button class="btn ${UI.theme.get() === 'dark' ? '' : 'btn-secondary'}" data-theme-set="dark">&#127769; Dark</button>
+            </div>
+          </div>
+          <div class="card" style="padding:18px;margin-bottom:14px">
+            <h3 style="margin-top:0">Change password</h3>
+            <form id="pw-form" style="max-width:420px">
+              <div class="field"><label>Current password</label><input type="password" id="pw-current" autocomplete="current-password" required></div>
+              <div class="field"><label>New password</label><input type="password" id="pw-new" autocomplete="new-password" required></div>
+              <div class="field"><label>Confirm new password</label><input type="password" id="pw-confirm" autocomplete="new-password" required></div>
+              <button class="btn" type="submit">Update password</button>
+            </form>
+          </div>
+          <div class="card" style="padding:18px">
+            <h3 style="margin-top:0">Interests</h3>
+            <p style="font-size:13px;color:var(--muted);margin-top:0">Your interests shape what shows up in your feed.</p>
+            <a class="btn btn-secondary" href="/onboarding.html">Edit interests</a>
+          </div>`;
+
+        el.querySelectorAll('[data-theme-set]').forEach((b) => {
+          b.addEventListener('click', () => {
+            UI.theme.set(b.dataset.themeSet);
+            renderSettings();
+          });
+        });
+
+        const pwForm = document.getElementById('pw-form');
+        pwForm.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const cur = document.getElementById('pw-current').value;
+          const nw = document.getElementById('pw-new').value;
+          const cf = document.getElementById('pw-confirm').value;
+          if (nw !== cf) { UI.toast('New passwords do not match', 'error'); return; }
+          const btn = pwForm.querySelector('button[type="submit"]');
+          btn.disabled = true;
+          try {
+            const r = await API.post('/auth/change-password', { current_password: cur, new_password: nw });
+            UI.toast(r.message || 'Password updated', 'success');
+            pwForm.reset();
+          } catch (err) { UI.toast(err.message, 'error'); }
+          btn.disabled = false;
+        });
+      }
+
+      tabsEl.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-atab]');
+        if (!btn) return;
+        document.querySelectorAll('#profile-tabs button').forEach((b) => b.classList.toggle('active', b === btn));
+        const t = btn.dataset.atab;
+        postsEl.style.display = t === 'posts' ? '' : 'none';
+        document.getElementById('tab-projects').style.display = t === 'projects' ? '' : 'none';
+        document.getElementById('tab-achievements').style.display = t === 'achievements' ? '' : 'none';
+        document.getElementById('tab-settings').style.display = t === 'settings' ? '' : 'none';
+        loadMoreBtn.style.display = t === 'posts' && hasMore ? 'inline-flex' : 'none';
+        if (t === 'projects' && !document.getElementById('tab-projects').dataset.done) {
+          document.getElementById('tab-projects').dataset.done = '1'; renderProjects();
+        }
+        if (t === 'achievements' && !document.getElementById('tab-achievements').dataset.done) {
+          document.getElementById('tab-achievements').dataset.done = '1'; loadAchievements();
+        }
+        if (t === 'settings' && !document.getElementById('tab-settings').dataset.done) {
+          document.getElementById('tab-settings').dataset.done = '1'; renderSettings();
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

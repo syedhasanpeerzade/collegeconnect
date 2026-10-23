@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clubs - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="container">
+    <div class="page-head">
+      <div><h1>College Clubs</h1><div class="sub">Find your people. Apply during open recruitment.</div></div>
+      <div style="display:flex;gap:10px">
+        <a class="btn btn-secondary" href="/my-clubs.html">My Clubs</a>
+      </div>
+    </div>
+
+    <div class="filter-bar">
+      <input type="search" class="search" id="f-search" placeholder="Search clubs...">
+      <select id="f-category">
+        <option value="">All categories</option>
+        <option>TECHNICAL</option><option>CULTURAL</option><option>SPORTS</option>
+        <option>ACADEMIC</option><option>SOCIAL_SERVICE</option><option>OTHER</option>
+      </select>
+      <select id="f-recruitment">
+        <option value="">Any recruitment status</option>
+        <option value="OPEN">Open for applications</option>
+        <option value="CLOSED">Closed</option>
+      </select>
+      <button class="btn btn-sm" id="f-apply">Apply</button>
+      <button class="btn btn-sm btn-secondary" id="f-clear">Clear</button>
+    </div>
+
+    <div id="clubs-grid" class="grid grid-3"></div>
+  </div>
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (function () {
+      const grid = document.getElementById('clubs-grid');
+
+      function filters() {
+        const p = new URLSearchParams();
+        const s = document.getElementById('f-search').value.trim();
+        const c = document.getElementById('f-category').value;
+        const r = document.getElementById('f-recruitment').value;
+        if (s) p.set('search', s);
+        if (c) p.set('category', c);
+        if (r) p.set('recruitment', r);
+        return p.toString();
+      }
+
+      async function load() {
+        grid.innerHTML = UI.loadingBox('Loading clubs...');
+        try {
+          const res = await API.get(`/clubs?${filters()}`);
+          const list = res.data || [];
+          if (!list.length) {
+            grid.innerHTML = UI.empty('No clubs found', 'Try different filters.');
+            return;
+          }
+          grid.innerHTML = list.map(UI.clubCard).join('');
+        } catch (err) {
+          grid.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        }
+      }
+
+      document.getElementById('f-apply').addEventListener('click', load);
+      document.getElementById('f-search').addEventListener('keydown', (e) => { if (e.key === 'Enter') load(); });
+      document.getElementById('f-clear').addEventListener('click', () => {
+        document.getElementById('f-search').value = '';
+        document.getElementById('f-category').value = '';
+        document.getElementById('f-recruitment').value = '';
+        load();
+      });
+
+      load();
+    })();
+  </script>
+</body>
+</html>

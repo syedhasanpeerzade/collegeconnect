@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="container">
+    <div class="page-head">
+      <div>
+        <h1 id="welcome">Welcome back</h1>
+        <div class="sub">Here is what is happening on campus.</div>
+      </div>
+      <div class="hero-actions" style="margin:0">
+        <a class="btn btn-sm" href="/events.html">Explore Events</a>
+        <a class="btn btn-sm btn-secondary" href="/clubs.html">Join a Club</a>
+        <a class="btn btn-sm btn-secondary" href="/event-request.html">Organize an Event</a>
+        <a class="btn btn-sm btn-secondary" href="/my-applications.html">My Event Applications</a>
+        <a class="btn btn-sm btn-secondary" href="/complaints.html">Submit a Complaint</a>
+        <a class="btn btn-sm btn-ghost" href="/achievements.html">Achievements</a>
+      </div>
+    </div>
+
+    <div id="stat-cards" class="grid grid-4" style="margin-bottom:8px"></div>
+
+    <div id="interests-banner"></div>
+
+    <div class="section">
+      <h2 id="rec-title">&#10024; Recommended For You</h2>
+      <div id="recommended" class="grid grid-3"></div>
+      <div id="rec-foot"></div>
+    </div>
+
+    <div class="grid grid-2 section">
+      <div class="card">
+        <h3>Upcoming events <a class="card-link" href="/events.html?all=1" style="float:right">View all</a></h3>
+        <div id="upcoming"><div class="loading">Loading...</div></div>
+      </div>
+      <div class="card">
+        <h3>My registrations <a class="card-link" href="/my-registrations.html" style="float:right">View all</a></h3>
+        <div id="myregs"><div class="loading">Loading...</div></div>
+      </div>
+      <div class="card">
+        <h3>My clubs <a class="card-link" href="/my-clubs.html" style="float:right">View all</a></h3>
+        <div id="myclubs"><div class="loading">Loading...</div></div>
+      </div>
+      <div class="card">
+        <h3>My complaints <a class="card-link" href="/complaints.html" style="float:right">View all</a></h3>
+        <div id="mycomplaints"><div class="loading">Loading...</div></div>
+      </div>
+    </div>
+
+    <div class="grid grid-2 section">
+      <div class="card">
+        <h3>Latest announcements <a class="card-link" href="/announcements.html" style="float:right">View all</a></h3>
+        <div id="announcements"><div class="loading">Loading...</div></div>
+      </div>
+      <div class="card">
+        <h3>Recent achievements <a class="card-link" href="/achievements.html" style="float:right">Hall of Fame</a></h3>
+        <div id="achievements"><div class="loading">Loading...</div></div>
+      </div>
+    </div>
+  </div>
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      const user = Auth.requireRole(['STUDENT', 'ORGANIZER', 'CLUB_COORDINATOR', 'FACULTY', 'ADMIN']);
+      if (!user) return;
+
+      let data;
+      try {
+        const res = await API.get('/admin/dashboard/student');
+        data = res.data;
+      } catch (err) {
+        document.getElementById('stat-cards').innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        return;
+      }
+
+      document.getElementById('welcome').textContent = `Welcome back, ${user.full_name.split(' ')[0]}`;
+
+      // ---- Personalization: Recommended For You + first-login banner ----
+      (async () => {
+        const recGrid = document.getElementById('recommended');
+        const recTitle = document.getElementById('rec-title');
+        const recFoot = document.getElementById('rec-foot');
+        // /events/recommended is a STUDENT-only endpoint — skip it for other roles
+        // instead of letting every admin/faculty dashboard log a 403.
+        if (user.role !== 'STUDENT') {
+          recGrid.closest('.section').style.display = 'none';
+          return;
+        }
+        try {
+          const st = await API.get('/interests/status');
+          if (st.data.role === 'STUDENT' && st.data.interests_configured === false) {
+            document.getElementById('interests-banner').innerHTML = `
+              <div class="card" style="border-left:4px solid var(--accent);margin-bottom:4px">
+                <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:space-between">
+                  <div><b>Tell us what you're interested in</b><br>
+                  <span style="font-size:13.5px;color:var(--muted)">Pick a few interests and we'll put matching events first - it takes 10 seconds.</span></div>
+                  <a class="btn btn-sm" href="/onboarding.html">Choose interests</a>
+                </div>
+              </div>`;
+            recTitle.innerHTML = 'Upcoming events';
+            recFoot.innerHTML = `<a href="/onboarding.html" class="btn btn-sm btn-ghost" style="margin-top:12px">Set interests for personalized picks</a>`;
+          }
+          const rec = await API.get('/events/recommended?limit=6');
+          const evs = (rec.data && rec.data.events) || [];
+          if (evs.length) {
+            recGrid.innerHTML = evs.map((e) => UI.eventCard(e)).join('');
+            UI.bindRegisterButtons(recGrid);
+            recFoot.innerHTML = `<a class="card-link" href="/events.html?all=1" style="display:inline-block;margin-top:12px">View All Recommendations</a>`;
+          } else if (!(st.data.role === 'STUDENT' && st.data.interests_configured === false)) {
+            recGrid.innerHTML = UI.empty('No recommendations yet', 'Pick a few interests and matching events will show up here.');
+          }
+        } catch (_e) {
+          recGrid.innerHTML = UI.empty('Recommendations unavailable', 'Try again later.');
+        }
+      })();
+
+      const counts = {
+        'Upcoming Events': data.upcoming_events.length,
+        'My Registrations': data.my_registrations.length,
+        'My Clubs': data.my_clubs.length,
+        'My Complaints': data.my_complaints.length,
+      };
+      document.getElementById('stat-cards').innerHTML =
+        Object.entries(counts).map(([label, v]) => `
+          <div class="card stat-card">
+            <span class="stat-label">${label}</span>
+            <span class="stat-value">${v}</span>
+            <span class="stat-foot">${{ 'Upcoming Events': 'open for registration', 'My Registrations': 'active', 'My Clubs': 'memberships', 'My Complaints': 'total' }[label]}</span>
+          </div>`).join('') + `
+          <div class="card stat-card">
+            <span class="stat-label">Notifications</span>
+            <span class="stat-value">${data.unread_notifications}</span>
+            <span class="stat-foot"><a href="/notifications.html">unread</a></span>
+          </div>`;
+
+      const mini = (rows, fn, emptyText) => rows.length
+        ? rows.map(fn).join('')
+        : UI.empty(emptyText);
+
+      document.getElementById('upcoming').innerHTML = mini(data.upcoming_events, (e) => `
+        <p style="margin:0 0 10px">
+          <a href="/event-details.html?id=${e.id}">${UI.esc(e.title)}</a><br>
+          <span style="font-size:13px;color:var(--muted)">${UI.fmtDate(e.event_date)} &middot; ${UI.fmtTime(e.start_time)} &middot; ${UI.esc(e.venue)}</span>
+        </p>`, 'No upcoming events.');
+
+      document.getElementById('myregs').innerHTML = mini(data.my_registrations, (r) => `
+        <p style="margin:0 0 10px">
+          <a href="/event-details.html?id=${r.event_id}">${UI.esc(r.title)}</a><br>
+          <span style="font-size:13px;color:var(--muted)">${UI.fmtDate(r.event_date)} &middot; <span class="mono">${UI.esc(r.public_id)}</span></span>
+        </p>`, 'No registrations yet.');
+
+      document.getElementById('myclubs').innerHTML = mini(data.my_clubs, (c) => `
+        <p style="margin:0 0 10px">
+          <a href="/club-details.html?id=${c.id}">${UI.esc(c.name)}</a> ${UI.statusBadge(c.role)}
+        </p>`, 'You are not in any clubs yet.')
+        + (data.pending_applications.length ? `
+          <hr class="divider"><h3 style="font-size:13.5px">Pending applications</h3>
+          ${data.pending_applications.map((a) => `
+            <p style="margin:0 0 8px">${UI.esc(a.club_name)} ${UI.statusBadge(a.status)}</p>`).join('')}` : '');
+
+      document.getElementById('mycomplaints').innerHTML = mini(data.my_complaints, (c) => `
+        <p style="margin:0 0 10px">
+          <a href="/complaint-details.html?id=${c.id}">${UI.esc(c.title)}</a><br>
+          <span style="font-size:13px">${UI.statusBadge(c.status)} ${UI.statusBadge(c.priority)} <span style="color:var(--muted)">${UI.fmtDate(c.created_at)}</span></span>
+        </p>`, 'No complaints filed.');
+
+      document.getElementById('announcements').innerHTML = mini(data.announcements, (a) => `
+        <p style="margin:0 0 10px">
+          <b style="font-size:14px">${UI.esc(a.title)}</b><br>
+          <span style="font-size:13px;color:var(--muted)">${UI.categoryLabel(a.category)} &middot; ${UI.fmtDate(a.published_at)}</span>
+        </p>`, 'No announcements.');
+
+      document.getElementById('achievements').innerHTML = mini(data.recent_achievements, (a) => `
+        <p style="margin:0 0 10px">
+          <a href="/achievement-details.html?id=${a.id}">${UI.esc(a.title)}</a><br>
+          <span style="font-size:13px;color:var(--muted)">${a.achievement_year} &middot; ${UI.positionLabel(a.position)}</span>
+        </p>`, 'No verified achievements yet.');
+    })();
+  </script>
+</body>
+</html>

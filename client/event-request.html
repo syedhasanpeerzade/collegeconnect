@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Organize an Event - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="container-narrow">
+    <div class="breadcrumbs"><a href="/events.html">Events</a> / Organize</div>
+    <div class="page-head"><div><h1>Apply to Organize an Event</h1>
+      <div class="sub">Your application goes to the HOD for approval. You can organize and publish the event only after it is approved.</div></div></div>
+
+    <div id="guard"></div>
+    <form id="req-form" class="card form-grid" style="display:none" novalidate>
+      <fieldset>
+        <legend>About the event</legend>
+        <div class="form-grid">
+          <div class="field">
+            <label for="title">Event name *</label>
+            <input id="title" required minlength="5" maxlength="160" placeholder="e.g. CodeSprint 2026 Hackathon">
+          </div>
+          <div class="form-row">
+            <div class="field">
+              <label for="category">Category *</label>
+              <select id="category" required>
+                <option>TECHNICAL</option><option>CULTURAL</option><option>SPORTS</option>
+                <option>WORKSHOP</option><option>SEMINAR</option><option>COMPETITION</option>
+                <option>FEST</option><option>CLUB_EVENT</option><option>CAREER</option>
+                <option>ARTS</option><option>OTHER</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="event_type">Event type *</label>
+              <select id="event_type">
+                <option value="COLLEGE_WIDE">College-wide</option>
+                <option value="DEPARTMENT">Department</option>
+                <option value="CLUB">Club</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label for="description">Event description *</label>
+            <textarea id="description" required minlength="20" placeholder="What happens at the event, who is it for, and what should attendees expect?"></textarea>
+          </div>
+          <div class="field">
+            <label for="objectives">Event objectives <span class="hint">(one per line)</span></label>
+            <textarea id="objectives" style="min-height:70px" placeholder="e.g. Introduce students to competitive programming&#10;Build team collaboration skills"></textarea>
+          </div>
+          <div class="form-row">
+            <div class="field">
+              <label for="department_id">Department <span class="hint">(for department events)</span></label>
+              <select id="department_id"><option value="">None</option></select>
+            </div>
+            <div class="field">
+              <label for="club_id">Club / organization <span class="hint">(for club events)</span></label>
+              <select id="club_id"><option value="">None</option></select>
+            </div>
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Schedule &amp; logistics</legend>
+        <div class="form-row-3">
+          <div class="field">
+            <label for="proposed_date">Proposed date *</label>
+            <input type="date" id="proposed_date" required>
+          </div>
+          <div class="field">
+            <label for="start_time">Start time *</label>
+            <input type="time" id="start_time" required value="10:00">
+          </div>
+          <div class="field">
+            <label for="end_time">End time *</label>
+            <input type="time" id="end_time" required value="17:00">
+          </div>
+        </div>
+        <div class="form-row" style="margin-top:14px">
+          <div class="field">
+            <label for="venue">Venue *</label>
+            <input id="venue" required placeholder="e.g. Central Seminar Hall">
+          </div>
+          <div class="field">
+            <label for="expected_participants">Expected participants</label>
+            <input type="number" id="expected_participants" min="1" max="100000" value="50">
+          </div>
+        </div>
+        <div class="field" style="margin-top:14px">
+          <label for="required_facilities">Required facilities</label>
+          <input id="required_facilities" placeholder="e.g. Projector, Wi-Fi, power strips, refreshments">
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Student organizer</legend>
+        <div class="form-row-3">
+          <div class="field">
+            <label for="organizer_name">Student organizer name *</label>
+            <input id="organizer_name" required>
+          </div>
+          <div class="field">
+            <label for="student_id">Student ID *</label>
+            <input id="student_id" required>
+          </div>
+          <div class="field">
+            <label for="contact-details-fallback">Contact information *</label>
+            <input id="contact-details-fallback" placeholder="Email or phone">
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Extra details</legend>
+        <div class="form-row">
+          <div class="field">
+            <label for="estimated_budget">Estimated budget (INR)</label>
+            <input type="number" id="estimated_budget" min="0" step="0.01" placeholder="e.g. 25000">
+          </div>
+          <div class="field">
+            <label for="faculty_coordinator_id">Faculty coordinator</label>
+            <select id="faculty_coordinator_id"><option value="">Select faculty</option></select>
+          </div>
+        </div>
+        <div class="field" style="margin-top:14px">
+          <label for="rules">Rules</label>
+          <textarea id="rules" style="min-height:70px" placeholder="Competition rules, conduct expectations..."></textarea>
+        </div>
+        <div class="form-row" style="margin-top:14px">
+          <div class="field">
+            <label for="eligibility">Eligibility</label>
+            <input id="eligibility" placeholder="e.g. Open to all departments, 2nd year and above">
+          </div>
+          <div class="field">
+            <label for="contact_details">Contact details</label>
+            <input id="contact_details" placeholder="Email or phone for queries">
+          </div>
+        </div>
+        <div class="form-row" style="margin-top:14px">
+          <div class="field">
+            <label for="poster">Event poster (image)</label>
+            <input type="file" id="poster" accept="image/*,.pdf">
+          </div>
+          <div class="field">
+            <label for="proposal">Proposal / document (PDF)</label>
+            <input type="file" id="proposal" accept=".pdf,image/*">
+          </div>
+        </div>
+      </fieldset>
+
+      <div id="form-msg"></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn" type="submit" id="submit-btn">Submit for HOD Approval</button>
+        <a class="btn btn-secondary" href="/my-applications.html">My Event Applications</a>
+      </div>
+    </form>
+  </div>
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      const guard = document.getElementById('guard');
+      const form = document.getElementById('req-form');
+      const user = Auth.user();
+      if (!user) { location.href = '/login.html?next=' + encodeURIComponent('/event-request.html'); return; }
+      if (!['STUDENT', 'ORGANIZER'].includes(user.role)) {
+        guard.innerHTML = '<div class="error-box">Only students and organizers can submit event proposals.</div>';
+        return;
+      }
+      form.style.display = 'grid';
+
+      // Prefill student organizer identity
+      document.getElementById('organizer_name').value = user.full_name || '';
+      document.getElementById('student_id').value = user.student_id || '';
+      document.getElementById('contact-details-fallback').value = user.email || '';
+
+      // Load reference data
+      const [depts, clubs, faculty] = await Promise.all([
+        API.get('/admin/departments'),
+        API.get('/clubs'),
+        API.get('/faculty/list').catch(() => ({ data: [] })),
+      ]);
+      document.getElementById('department_id').innerHTML =
+        '<option value="">None</option>' + (depts.data || []).map((d) => `<option value="${d.id}">${UI.esc(d.code)} - ${UI.esc(d.name)}</option>`).join('');
+      document.getElementById('club_id').innerHTML =
+        '<option value="">None</option>' + (clubs.data || []).map((c) => `<option value="${c.id}">${UI.esc(c.name)}</option>`).join('');
+      document.getElementById('faculty_coordinator_id').innerHTML =
+        '<option value="">Select faculty</option>' + (faculty.data || []).map((f) => `<option value="${f.id}">${UI.esc(f.full_name)}</option>`).join('');
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const msg = document.getElementById('form-msg');
+        msg.innerHTML = '';
+        const fd = new FormData();
+        fd.append('title', document.getElementById('title').value.trim());
+        fd.append('description', document.getElementById('description').value.trim());
+        fd.append('objectives', document.getElementById('objectives').value.trim());
+        fd.append('category', document.getElementById('category').value);
+        fd.append('event_type', document.getElementById('event_type').value);
+        fd.append('department_id', document.getElementById('department_id').value || '');
+        fd.append('club_id', document.getElementById('club_id').value || '');
+        fd.append('proposed_date', document.getElementById('proposed_date').value);
+        fd.append('start_time', document.getElementById('start_time').value);
+        fd.append('end_time', document.getElementById('end_time').value);
+        fd.append('venue', document.getElementById('venue').value.trim());
+        fd.append('expected_participants', document.getElementById('expected_participants').value);
+        fd.append('required_facilities', document.getElementById('required_facilities').value.trim());
+        fd.append('estimated_budget', document.getElementById('estimated_budget').value);
+        fd.append('faculty_coordinator_id', document.getElementById('faculty_coordinator_id').value || '');
+        fd.append('rules', document.getElementById('rules').value.trim());
+        fd.append('eligibility', document.getElementById('eligibility').value.trim());
+        fd.append('contact_details', document.getElementById('contact_details').value.trim());
+        const poster = document.getElementById('poster').files[0];
+        const proposal = document.getElementById('proposal').files[0];
+        if (poster) fd.append('poster', poster);
+        if (proposal) fd.append('proposal', proposal);
+        // Student organizer identity (prefilled from the account, editable)
+        fd.append('organizer_name', document.getElementById('organizer_name').value.trim());
+        fd.append('student_id', document.getElementById('student_id').value.trim());
+        fd.append('contact_details', document.getElementById('contact_details').value.trim() || document.getElementById('contact-details-fallback').value);
+
+        const btn = document.getElementById('submit-btn');
+        btn.disabled = true; btn.textContent = 'Submitting...';
+        try {
+          const res = await API.postForm('/events/requests', fd);
+          UI.toast('Application submitted successfully. Your event is awaiting HOD approval.', 'success');
+          location.href = '/my-applications.html?submitted=' + encodeURIComponent(res.data.public_id);
+        } catch (err) {
+          msg.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+          btn.disabled = false; btn.textContent = 'Submit for Review';
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

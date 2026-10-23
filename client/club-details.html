@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Club Details - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="container-narrow">
+    <div class="breadcrumbs"><a href="/clubs.html">Clubs</a> / Details</div>
+    <div id="content"><div class="loading">Loading club...</div></div>
+  </div>
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      const box = document.getElementById('content');
+      const id = new URLSearchParams(location.search).get('id');
+      if (!id) { box.innerHTML = UI.empty('Club not found'); return; }
+
+      let club;
+      try {
+        const res = await API.get(`/clubs/${id}`);
+        club = res.data;
+      } catch (err) {
+        box.innerHTML = UI.empty('Club not found', err.message);
+        return;
+      }
+
+      const user = Auth.user();
+      const isMember = club.my_membership && club.my_membership.is_active;
+      const app = club.my_application;
+      const canApply = user && user.role === 'STUDENT' && !isMember &&
+        (!app || ['REJECTED'].includes(app.status)) && club.recruitment_status === 'OPEN';
+
+      const applyArea = () => {
+        if (!user) return `<a class="btn" href="/login.html?next=${encodeURIComponent('/club-details.html?id=' + id)}">Login to apply</a>`;
+        if (isMember) return UI.statusBadge('REGISTERED') + ' <span style="font-size:13px;color:var(--muted)">You are a member (' + UI.categoryLabel(club.my_membership.role) + ')</span>';
+        if (app && ['SUBMITTED', 'UNDER_REVIEW'].includes(app.status)) {
+          return `<span>${UI.statusBadge(app.status)} <span style="font-size:13px;color:var(--muted)">Application ${UI.esc(app.public_id)} is being processed</span></span>`;
+        }
+        if (app && app.status === 'APPROVED') return '<span class="ok-box" style="margin:0">Your application was approved.</span>';
+        if (app && app.status === 'REJECTED') {
+          return `<div class="error-box">Previous application was rejected: ${UI.esc(app.rejection_reason || 'Not specified')}</div>
+                  <button class="btn" id="apply-btn">Apply again</button>`;
+        }
+        if (club.recruitment_status === 'CLOSED') return '<span class="badge badge-red">Recruitment closed</span>';
+        if (canApply) return '<button class="btn" id="apply-btn">Apply to join</button>';
+        return '';
+      };
+
+      box.innerHTML = `
+        ${club.banner_path ? `<img src="${UI.esc(club.banner_path)}" alt="Club banner" style="border-radius:10px;border:1px solid var(--line);margin-bottom:16px;width:100%;max-height:260px;object-fit:cover">` : ''}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+          ${UI.statusBadge(club.category)}${UI.statusBadge(club.recruitment_status)}${UI.statusBadge(club.status)}
+        </div>
+        <h1 style="font-size:26px">${UI.esc(club.name)}</h1>
+        <p style="color:var(--ink-soft)">${UI.esc(club.description)}</p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px">${applyArea()}</div>
+        <div id="apply-msg"></div>
+
+        <div class="grid grid-2 section">
+          <div class="card">
+            <h3>About</h3>
+            <dl class="kv">
+              ${club.objectives ? `<dt>Objectives</dt><dd>${UI.esc(club.objectives)}</dd>` : ''}
+              ${club.activities ? `<dt>Activities</dt><dd>${UI.esc(club.activities)}</dd>` : ''}
+              ${club.eligibility ? `<dt>Eligibility</dt><dd>${UI.esc(club.eligibility)}</dd>` : ''}
+              ${club.faculty_coordinator ? `<dt>Faculty coordinator</dt><dd>${UI.esc(club.faculty_coordinator)}</dd>` : ''}
+              <dt>Members</dt><dd>${club.member_count}</dd>
+            </dl>
+          </div>
+          <div class="card">
+            <h3>Student coordinators &amp; members</h3>
+            ${club.members.length ? `<div class="table-wrap"><table><tbody>
+              ${club.members.slice(0, 12).map((m) => `
+                <tr><td data-label="Name">${UI.esc(m.full_name)} ${m.role !== 'MEMBER' ? UI.statusBadge(m.role) : ''}</td>
+                <td data-label="Dept" style="color:var(--muted)">${UI.esc(m.department || '-')}</td></tr>`).join('')}
+            </tbody></table></div>
+            ${club.members.length > 12 ? `<p style="font-size:12.5px;color:var(--muted);margin:8px 0 0">and ${club.members.length - 12} more members</p>` : ''}`
+            : '<p style="color:var(--muted)">No members listed yet.</p>'}
+          </div>
+        </div>
+
+        <div class="grid grid-2 section">
+          <div class="card">
+            <h3>Upcoming events</h3>
+            ${club.upcoming_events.length ? club.upcoming_events.map((e) => `
+              <p style="margin:0 0 8px"><a href="/event-details.html?id=${e.id}">${UI.esc(e.title)}</a><br>
+              <span style="font-size:13px;color:var(--muted)">${UI.fmtDate(e.event_date)} &middot; ${UI.esc(e.venue)}</span></p>`).join('')
+              : '<p style="color:var(--muted)">Nothing scheduled right now.</p>'}
+          </div>
+          <div class="card">
+            <h3>Achievements</h3>
+            ${club.achievements.length ? club.achievements.map((a) => `
+              <p style="margin:0 0 8px"><a href="/achievement-details.html?id=${a.id}">${UI.esc(a.title)}</a><br>
+              <span style="font-size:13px;color:var(--muted)">${a.achievement_year} &middot; ${UI.positionLabel(a.position)}</span></p>`).join('')
+              : '<p style="color:var(--muted)">No verified achievements recorded.</p>'}
+          </div>
+        </div>`;
+
+      const applyBtn = document.getElementById('apply-btn');
+      if (applyBtn) {
+        applyBtn.addEventListener('click', () => {
+          location.href = `/club-application.html?club=${id}`;
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

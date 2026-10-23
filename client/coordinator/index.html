@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Coordinator Dashboard - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="container">
+    <div class="page-head">
+      <div><h1>Coordinator Workspace</h1><div class="sub">Manage the clubs assigned to you.</div></div>
+    </div>
+    <div id="content"><div class="loading">Loading your clubs...</div></div>
+  </div>
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      const user = Auth.requireRole(['CLUB_COORDINATOR', 'ADMIN']);
+      if (!user) return;
+      const box = document.getElementById('content');
+      try {
+        const res = await API.get('/clubs/coordinator/my-clubs');
+        const clubs = res.data || [];
+        if (!clubs.length) {
+          box.innerHTML = UI.empty('No clubs assigned to you', 'Ask an administrator to assign you as a club coordinator.');
+          return;
+        }
+        box.innerHTML = clubs.map((c) => `
+          <div class="card" style="margin-bottom:16px">
+            <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
+              <div>
+                <h3 style="margin:0 0 4px"><a href="/club-details.html?id=${c.id}">${UI.esc(c.name)}</a> ${UI.statusBadge(c.recruitment_status)}</h3>
+                <span style="font-size:13px;color:var(--muted)">Faculty: ${UI.esc(c.faculty_coordinator || '-')}</span>
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <a class="btn btn-sm btn-secondary" href="/coordinator/applications.html?club=${c.id}">Applications (${c.pending_applications} pending)</a>
+                <a class="btn btn-sm btn-secondary" href="/coordinator/members.html?club=${c.id}">Members</a>
+                <a class="btn btn-sm btn-secondary" href="/coordinator/club-settings.html?club=${c.id}">Settings</a>
+              </div>
+            </div>
+            <div class="grid grid-4" style="margin-top:14px">
+              <div class="stat-card"><span class="stat-label">Members</span><span class="stat-value">${c.member_count}</span></div>
+              <div class="stat-card"><span class="stat-label">Pending Applications</span><span class="stat-value">${c.pending_applications}</span></div>
+              <div class="stat-card"><span class="stat-label">Upcoming Events</span><span class="stat-value">${c.upcoming_events}</span></div>
+              <div class="stat-card"><span class="stat-label">Total Registrations</span><span class="stat-value">${c.total_registrations}</span></div>
+            </div>
+          </div>`).join('');
+      } catch (err) {
+        box.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+      }
+    })();
+  </script>
+</body>
+</html>

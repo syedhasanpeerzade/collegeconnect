@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Event Approvals - CollegeConnect Admin</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="container">
+    <div class="admin-layout">
+      <aside class="side-nav">
+        <a href="/admin/index.html">Dashboard</a>
+        <a href="/admin/users.html">Users</a>
+        <a href="/admin/content.html">Manage Content</a>
+        <a href="/admin/import.html">Bulk Import</a>
+        <a href="/admin/approvals.html" class="active">Event Approvals</a>
+        <a href="/admin/achievements.html">Achievements</a>
+        <a href="/admin/qr.html">College QR Code</a>
+        <a href="/admin/reports.html">Reports</a>
+        <a href="/faculty/complaints.html">Complaints</a>
+        <a href="/announcements.html">Announcements</a>
+      </aside>
+      <main>
+        <div class="page-head">
+          <div><h1>Event Request Approvals</h1><div class="sub">Admin view of the event proposal review queue.</div></div>
+        </div>
+        <!-- The shared approvals interface is role-aware; admins get the same queue. -->
+        <div id="approval-mount"></div>
+      </main>
+    </div>
+  </div>
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    // Admins use the same review interface as faculty.
+    location.replace('/faculty/approvals.html');
+  </script>
+</body>
+</html>

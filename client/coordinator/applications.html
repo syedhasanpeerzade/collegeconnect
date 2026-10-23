@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Club Applications - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="container">
+    <div class="page-head">
+      <div><h1>Club Applications</h1><div class="sub">Review, approve or reject applications for your club.</div></div>
+      <select id="status-filter">
+        <option value="">All statuses</option>
+        <option>SUBMITTED</option><option>UNDER_REVIEW</option><option>APPROVED</option><option>REJECTED</option>
+      </select>
+    </div>
+    <div id="content"><div class="loading">Loading...</div></div>
+  </div>
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      const user = Auth.requireRole(['CLUB_COORDINATOR', 'ADMIN', 'FACULTY']);
+      if (!user) return;
+      const box = document.getElementById('content');
+      const clubId = new URLSearchParams(location.search).get('club');
+      if (!clubId) { box.innerHTML = UI.empty('Select a club from the coordinator dashboard first'); return; }
+
+      async function load() {
+        box.innerHTML = UI.loadingBox('Loading applications...');
+        try {
+          const status = document.getElementById('status-filter').value;
+          const res = await API.get(`/clubs/${clubId}/applications${status ? `?status=${status}` : ''}`);
+          const rows = res.data || [];
+          if (!rows.length) { box.innerHTML = UI.empty('No applications', 'No applications match this filter.'); return; }
+
+          box.innerHTML = rows.map((a) => `
+            <div class="card" style="margin-bottom:14px">
+              <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
+                <div>
+                  <h3 style="margin:0 0 4px">${UI.esc(a.full_name)} <span class="mono" style="font-size:12.5px;color:var(--muted)">${UI.esc(a.public_id)}</span></h3>
+                  <span style="font-size:13px;color:var(--muted)">${UI.esc(a.student_id || '')} &middot; ${UI.esc(a.department || '-')} &middot; Year ${a.year || '-'} &middot; ${UI.esc(a.email)} &middot; ${UI.esc(a.phone)}</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center">
+                  ${UI.statusBadge(a.status)}
+                  ${a.status === 'SUBMITTED' ? `<button class="btn btn-sm btn-secondary" data-review="${a.id}">Start review</button>` : ''}
+                  ${['SUBMITTED', 'UNDER_REVIEW'].includes(a.status) ? `
+                    <button class="btn btn-sm" data-approve="${a.id}" data-name="${UI.esc(a.full_name)}">Approve</button>
+                    <button class="btn btn-sm btn-danger" data-reject="${a.id}" data-name="${UI.esc(a.full_name)}">Reject</button>` : ''}
+                </div>
+              </div>
+              <hr class="divider">
+              <p style="margin:0 0 6px"><b>Why join:</b> ${UI.esc(a.why_join)}</p>
+              ${a.experience ? `<p style="margin:0 0 6px"><b>Experience:</b> ${UI.esc(a.experience)}</p>` : ''}
+              ${a.skills ? `<p style="margin:0 0 6px"><b>Skills:</b> ${UI.esc(a.skills)}</p>` : ''}
+              ${a.interests ? `<p style="margin:0 0 6px"><b>Interests:</b> ${UI.esc(a.interests)}</p>` : ''}
+              ${a.custom_answers.length ? `
+                <hr class="divider">
+                <h4 style="margin:0 0 8px">Custom questions</h4>
+                ${a.custom_answers.map((qa) => `<p style="margin:0 0 6px"><b>${UI.esc(qa.question)}:</b> ${UI.esc(qa.answer)}</p>`).join('')}` : ''}
+            </div>`).join('');
+
+          box.querySelectorAll('[data-review]').forEach((b) => {
+            b.addEventListener('click', async () => {
+              try {
+                await API.put(`/clubs/applications/${b.dataset.review}/review`);
+                UI.toast('Moved to under review', 'success');
+                load();
+              } catch (err) { UI.toast(err.message, 'error'); }
+            });
+          });
+
+          box.querySelectorAll('[data-approve]').forEach((b) => {
+            b.addEventListener('click', async () => {
+              if (!(await UI.confirm(`Approve ${b.dataset.name} and add them to the club?`, { confirmText: 'Approve' }))) return;
+              try {
+                const res = await API.put(`/clubs/applications/${b.dataset.approve}/approve`);
+                UI.toast(res.message, 'success');
+                load();
+              } catch (err) { UI.toast(err.message, 'error'); }
+            });
+          });
+
+          box.querySelectorAll('[data-reject]').forEach((b) => {
+            b.addEventListener('click', async () => {
+              const reason = await UI.prompt(`Reason for rejecting ${b.dataset.name}:`, {
+                title: 'Reject application', multiline: true, confirmText: 'Reject',
+              });
+              if (!reason) return;
+              try {
+                const res = await API.put(`/clubs/applications/${b.dataset.reject}/reject`, { rejection_reason: reason });
+                UI.toast(res.message, 'success');
+                load();
+              } catch (err) { UI.toast(err.message, 'error'); }
+            });
+          });
+        } catch (err) {
+          box.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        }
+      }
+
+      document.getElementById('status-filter').addEventListener('change', load);
+      load();
+    })();
+  </script>
+</body>
+</html>

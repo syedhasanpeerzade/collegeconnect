@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Complaint Details - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="container-narrow">
+    <div class="breadcrumbs"><a href="/complaints.html">Complaints</a> / Details</div>
+    <div id="content"><div class="loading">Loading complaint...</div></div>
+  </div>
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      const user = Auth.requireRole(['STUDENT', 'ORGANIZER', 'CLUB_COORDINATOR', 'FACULTY', 'ADMIN']);
+      if (!user) return;
+      const box = document.getElementById('content');
+      const id = new URLSearchParams(location.search).get('id');
+      if (!id) { box.innerHTML = UI.empty('Complaint not found'); return; }
+
+      let c;
+      try {
+        const res = await API.get(`/complaints/${id}`);
+        c = res.data;
+      } catch (err) { box.innerHTML = UI.empty('Complaint not found', err.message); return; }
+
+      const steps = ['SUBMITTED', 'UNDER_REVIEW', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'];
+      const order = { SUBMITTED: 0, UNDER_REVIEW: 1, ASSIGNED: 2, IN_PROGRESS: 3, RESOLVED: 4, CLOSED: 5, REOPENED: 1 };
+      const cur = order[c.status] ?? 0;
+      const stepper = steps.map((s, i) => {
+        const cls = i < cur ? 'done' : i === cur ? 'current' : '';
+        return `<span class="${cls}">${UI.categoryLabel(s)}</span>`;
+      }).join('');
+
+      const isStaff = ['ADMIN', 'FACULTY'].includes(user.role);
+      const isOwner = c.student_id === user.id;
+
+      const staffPanel = isStaff && !['CLOSED'].includes(c.status) ? `
+        <div class="card section">
+          <h3>Update status</h3>
+          <div class="form-row">
+            <div class="field">
+              <label for="s-status">New status</label>
+              <select id="s-status">
+                ${['UNDER_REVIEW','ASSIGNED','IN_PROGRESS','RESOLVED','CLOSED']
+                  .filter((s) => order[s] >= cur && s !== c.status)
+                  .map((s) => `<option>${s}</option>`).join('')}
+              </select>
+            </div>
+            <div class="field">
+              <label for="s-assigned">Assign to (department / staff)</label>
+              <input id="s-assigned" placeholder="e.g. IT Services" value="${UI.esc(c.assigned_to || '')}">
+            </div>
+          </div>
+          <div class="field" style="margin-top:14px">
+            <label for="s-remarks">Remarks</label>
+            <textarea id="s-remarks" style="min-height:70px" placeholder="What action was taken?"></textarea>
+          </div>
+          <button class="btn" id="s-save" style="margin-top:12px">Save update</button>
+        </div>` : '';
+
+      const studentPanel = isOwner && c.status === 'RESOLVED' ? `
+        <div class="card section">
+          <h3>Was your issue resolved?</h3>
+          <p style="font-size:14px;color:var(--ink-soft)">Confirm to close this complaint, or reopen it if the problem persists.</p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn" id="confirm-btn">Confirm resolution</button>
+            <button class="btn btn-danger" id="reopen-btn">Reopen complaint</button>
+          </div>
+        </div>` : '';
+
+      box.innerHTML = `
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+          ${UI.statusBadge(c.priority)}${UI.statusBadge(c.status)}
+        </div>
+        <h1 style="font-size:24px">${UI.esc(c.title)}</h1>
+        <div class="stepper">${stepper}</div>
+        <div class="grid grid-2">
+          <div class="card">
+            <h3>Details</h3>
+            <dl class="kv">
+              <dt>Complaint ID</dt><dd class="mono">${UI.esc(c.public_id)}</dd>
+              <dt>Category</dt><dd>${UI.categoryLabel(c.category)}</dd>
+              <dt>Location</dt><dd>${UI.esc(c.location || '-')}</dd>
+              <dt>Submitted by</dt><dd>${UI.esc(c.student_name)} ${isStaff ? `(${UI.esc(c.student_number || '')}, ${UI.esc(c.department_code || '-')})` : ''}</dd>
+              <dt>Submitted on</dt><dd>${UI.fmtDateTime(c.created_at)}</dd>
+              <dt>Assigned to</dt><dd>${UI.esc(c.assigned_to || 'Not yet assigned')}</dd>
+              ${isStaff ? `<dt>Contact</dt><dd>${UI.esc(c.student_email || '-')}</dd>` : ''}
+            </dl>
+          </div>
+          <div class="card">
+            <h3>Description</h3>
+            <p style="white-space:pre-wrap">${UI.esc(c.description)}</p>
+            ${c.attachment_path ? `<a href="${UI.esc(c.attachment_path)}" target="_blank" rel="noopener">View attachment</a>` : ''}
+          </div>
+        </div>
+
+        ${studentPanel}
+
+        <div class="card section">
+          <h3>Status history</h3>
+          <ul class="timeline">
+            ${c.history.map((h) => `
+              <li>
+                <div class="tl-head">${UI.categoryLabel(h.new_status)}<span class="tl-time">${UI.fmtDateTime(h.created_at)}</span></div>
+                ${h.remarks ? `<div class="tl-note">${UI.esc(h.remarks)}</div>` : ''}
+                ${h.changed_by_name ? `<div class="tl-note" style="color:var(--muted)">by ${UI.esc(h.changed_by_name)}</div>` : ''}
+              </li>`).join('')}
+          </ul>
+        </div>
+
+        ${staffPanel}
+      `;
+
+      const sSave = document.getElementById('s-save');
+      if (sSave) {
+        sSave.addEventListener('click', async () => {
+          const status = document.getElementById('s-status').value;
+          const remarks = document.getElementById('s-remarks').value.trim();
+          const assigned = document.getElementById('s-assigned').value.trim();
+          if (status === 'ASSIGNED' && !assigned) { UI.toast('Please enter who this is assigned to', 'error'); return; }
+          try {
+            const res = await API.put(`/complaints/${id}/status`, { status, remarks, assigned_to: assigned || null });
+            UI.toast(res.message, 'success');
+            setTimeout(() => location.reload(), 900);
+          } catch (err) { UI.toast(err.message, 'error'); }
+        });
+      }
+
+      const confirmBtn = document.getElementById('confirm-btn');
+      if (confirmBtn) {
+        confirmBtn.addEventListener('click', async () => {
+          try {
+            const res = await API.post(`/complaints/${id}/feedback`, { action: 'confirm' });
+            UI.toast(res.message, 'success');
+            setTimeout(() => location.reload(), 900);
+          } catch (err) { UI.toast(err.message, 'error'); }
+        });
+      }
+
+      const reopenBtn = document.getElementById('reopen-btn');
+      if (reopenBtn) {
+        reopenBtn.addEventListener('click', async () => {
+          const reason = await UI.prompt('Why are you reopening this complaint? (min 10 characters)', {
+            title: 'Reopen complaint', multiline: true, confirmText: 'Reopen',
+          });
+          if (!reason) return;
+          try {
+            const res = await API.post(`/complaints/${id}/feedback`, { action: 'reopen', feedback: reason });
+            UI.toast(res.message, 'success');
+            setTimeout(() => location.reload(), 900);
+          } catch (err) { UI.toast(err.message, 'error'); }
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

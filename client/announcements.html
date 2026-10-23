@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Announcements - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="container">
+    <div class="page-head">
+      <div><h1>&#128226; Announcements</h1><div class="sub">Latest updates from your college.</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <select id="f-category">
+          <option value="">All categories</option>
+          <option>GENERAL</option><option>EVENT</option><option>CLUB</option>
+          <option>ACADEMIC</option><option>URGENT</option>
+        </select>
+        <button class="btn" id="new-ann" style="display:none">New Announcement</button>
+      </div>
+    </div>
+
+    <!-- Quick actions -->
+    <div class="ann-actions" id="ann-actions">
+      <a class="ann-quick" href="/events.html"><span class="aq-icon">&#127942;</span><span class="aq-body"><b>Explore Events</b><span>Browse &amp; register for what's coming up</span></span></a>
+      <a class="ann-quick" href="/my-registrations.html"><span class="aq-icon">&#127915;</span><span class="aq-body"><b>My Registrations</b><span>Tickets, QR codes and schedules</span></span></a>
+      <a class="ann-quick" href="/clubs.html"><span class="aq-icon">&#127979;</span><span class="aq-body"><b>Clubs</b><span>Find your people, join a club</span></span></a>
+      <a class="ann-quick" href="/achievements.html"><span class="aq-icon">&#127941;</span><span class="aq-body"><b>Achievements</b><span>Latest event results &amp; Hall of Fame</span></span></a>
+    </div>
+
+    <div id="important-box"></div>
+    <div id="content"><div class="loading">Loading...</div></div>
+  </div>
+
+  <div class="modal-overlay" id="ann-modal" style="display:none">
+    <div class="modal" style="max-width:560px">
+      <h3>Publish announcement</h3>
+      <form id="ann-form" class="form-grid" novalidate>
+        <div class="field">
+          <label for="a-title">Title *</label>
+          <input id="a-title" required maxlength="200">
+        </div>
+        <div class="field">
+          <label for="a-desc">Description *</label>
+          <textarea id="a-desc" required></textarea>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label for="a-category">Priority / type</label>
+            <select id="a-category">
+              <option>GENERAL</option><option>EVENT</option><option>CLUB</option>
+              <option>ACADEMIC</option><option>URGENT</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="a-audience">Audience</label>
+            <select id="a-audience">
+              <option>ALL</option><option>STUDENTS</option><option>FACULTY</option><option>STAFF</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label for="a-expiry">Expiry date <span class="hint">(optional)</span></label>
+          <input type="date" id="a-expiry">
+        </div>
+        <div class="field">
+          <label for="a-file">Attachment (optional)</label>
+          <input type="file" id="a-file" accept="image/*,.pdf">
+        </div>
+        <div id="a-file-preview"></div>
+        <div id="form-msg"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" id="close-modal">Cancel</button>
+          <button type="submit" class="btn">Publish</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      const user = Auth.user();
+      const isStaff = user && ['ADMIN', 'FACULTY'].includes(user.role);
+      const box = document.getElementById('content');
+      const modal = document.getElementById('ann-modal');
+      const newBtn = document.getElementById('new-ann');
+      if (isStaff) newBtn.style.display = 'inline-flex';
+
+      newBtn.addEventListener('click', () => { modal.style.display = 'flex'; });
+      document.getElementById('close-modal').addEventListener('click', () => { modal.style.display = 'none'; });
+      // Upload preview: images show exactly like they will render on the page
+      // (complete, uncropped, aspect ratio preserved) + a remove option.
+      const fileInput = document.getElementById('a-file');
+      const filePreview = document.getElementById('a-file-preview');
+      fileInput.addEventListener('change', () => {
+        const f = fileInput.files[0];
+        filePreview.innerHTML = '';
+        if (!f) return;
+        if (f.type === 'application/pdf') {
+          filePreview.innerHTML = `<div class="hint" style="margin-top:8px">&#128206; ${UI.esc(f.name)} (${Math.round(f.size / 1024)} KB)</div>`;
+          return;
+        }
+        if (!f.type.startsWith('image/')) return;
+        const url = URL.createObjectURL(f);
+        filePreview.innerHTML = `
+          <div class="ann-file-preview" style="margin-top:8px">
+            <img class="announcement-image-preview" src="${url}" alt="Preview">
+            <div class="hint" style="margin-top:6px">${UI.esc(f.name)} \u00b7 ${Math.round(f.size / 1024)} KB \u2014 shown exactly like this on the page</div>
+            <button type="button" class="btn btn-sm btn-ghost" id="a-file-remove" style="margin-top:6px">Remove</button>
+          </div>`;
+        filePreview.querySelector('#a-file-remove').addEventListener('click', () => {
+          fileInput.value = '';
+          filePreview.innerHTML = '';
+        });
+      });
+
+      modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
+
+      const PRIORITY = {
+        URGENT:  { label: 'Urgent',    badge: '<span class="prio prio-urgent">&#128680; Urgent</span>' },
+        EVENT:   { label: 'Important', badge: '<span class="prio prio-important">&#9432; Important</span>' },
+        CLUB:    { label: 'Important', badge: '<span class="prio prio-important">&#9432; Important</span>' },
+        ACADEMIC:{ label: 'Important', badge: '<span class="prio prio-important">&#9432; Important</span>' },
+        GENERAL: { label: 'Normal',    badge: '<span class="prio prio-normal">&#9898; Normal</span>' },
+      };
+
+      function postedBy(a) {
+        const names = { ADMIN: 'Admin', FACULTY: 'Event Coordinator / Faculty', ORGANIZER: 'Organizer', CLUB_COORDINATOR: 'Club Coordinator' };
+        return names[a.created_by_role] || 'Admin';
+      }
+
+      // Long descriptions: collapsed preview + "Read More" toggle (per card)
+      const DESC_LIMIT = 260;
+      function descBlock(a) {
+        const text = a.description || '';
+        if (text.length <= DESC_LIMIT) {
+          return `<p class="ann-desc" style="margin:10px 0 4px;white-space:pre-wrap">${UI.esc(text)}</p>`;
+        }
+        const short = text.slice(0, DESC_LIMIT).trimEnd();
+        return `
+          <p class="ann-desc" style="margin:10px 0 4px;white-space:pre-wrap">${UI.esc(short)}<span class="ann-desc-ellipsis">\u2026</span><span class="ann-desc-more" style="white-space:pre-wrap;display:none">${UI.esc(text.slice(DESC_LIMIT))}</span></p>
+          <button type="button" class="btn btn-sm btn-ghost read-more-btn" data-desc-toggle>Read More</button>`;
+      }
+
+      function bindDescToggles(scope) {
+        scope.querySelectorAll('[data-desc-toggle]').forEach((btn) => {
+          const p = btn.previousElementSibling;
+          if (!p) return;
+          const ellipsis = p.querySelector('.ann-desc-ellipsis');
+          const more = p.querySelector('.ann-desc-more');
+          const expanded = btn.dataset.expanded === '1';
+          if (more) more.style.display = expanded ? 'inline' : 'none';
+          if (ellipsis) ellipsis.style.display = expanded ? 'none' : 'inline';
+          btn.textContent = expanded ? 'Read Less' : 'Read More';
+        });
+      }
+
+      function card(a) {
+        const prio = PRIORITY[a.category] || PRIORITY.GENERAL;
+        const important = a.category !== 'GENERAL';
+        const isImage = a.attachment_path && /\.(png|jpe?g|gif|webp)$/i.test(a.attachment_path);
+        return `
+          <div class="card ann-card ${a.category === 'URGENT' ? 'ann-urgent' : important ? 'ann-important' : ''}">
+            ${isImage ? `<img class="ann-img" src="${UI.esc(a.attachment_path)}" alt="">` : ''}
+            <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
+              <div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
+                  ${prio.badge}${UI.statusBadge(a.category)}
+                </div>
+                <h3 style="margin:0">${UI.esc(a.title)}</h3>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <span style="font-size:12.5px;color:var(--muted)">${UI.fmtDateTime(a.published_at)}</span>
+                ${isStaff ? `<button class="btn btn-sm btn-danger" data-del="${a.id}" data-title="${UI.esc(a.title)}">Delete</button>` : ''}
+              </div>
+            </div>
+            ${descBlock(a)}
+            <div class="ann-meta">
+              <span>&#9997;&#65039; Posted by ${UI.esc(postedBy(a))}${a.created_by_name ? ` \u00b7 ${UI.esc(a.created_by_name)}` : ''}</span>
+              ${a.attachment_path && !isImage ? `<a href="${UI.esc(a.attachment_path)}" target="_blank" rel="noopener">&#128206; Attachment</a>` : ''}
+            </div>
+            ${a.expiry_date ? `<p class="hint" style="margin:6px 0 0">Shown until ${UI.fmtDate(a.expiry_date)}</p>` : ''}
+          </div>`;
+      }
+
+      async function load() {
+        box.innerHTML = UI.loadingBox('Loading announcements...');
+        try {
+          const cat = document.getElementById('f-category').value;
+          const res = await API.get(`/announcements${cat ? `?category=${cat}` : ''}`);
+          const rows = res.data || [];
+          const importantBox = document.getElementById('important-box');
+          if (!rows.length) {
+            importantBox.innerHTML = '';
+            box.innerHTML = UI.empty('No announcements', 'Check back later.');
+            return;
+          }
+          // Important/Urgent pinned at top when viewing "All"
+          const urgent = cat === '' ? rows.filter((a) => a.category === 'URGENT' || a.category === 'ACADEMIC') : [];
+          const rest = cat === '' ? rows.filter((a) => !urgent.includes(a)) : rows;
+          importantBox.innerHTML = urgent.length
+            ? `<h2 style="font-size:15px;margin:0 0 10px;color:var(--danger)">&#9888;&#65039; Important announcements</h2>
+               ${urgent.map(card).join('')}`
+            : '';
+          box.innerHTML = (urgent.length && rest.length
+            ? '<h2 style="font-size:15px;color:var(--muted);margin:22px 0 10px">All updates</h2>' : '')
+            + rest.map(card).join('');
+
+          box.querySelectorAll('[data-del]').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+              if (!(await UI.confirm(`Delete announcement "${btn.dataset.title}"?`, { confirmText: 'Delete' }))) return;
+              try {
+                await API.del(`/announcements/${btn.dataset.del}`);
+                UI.toast('Announcement deleted', 'success');
+                load();
+              } catch (err) { UI.toast(err.message, 'error'); }
+            });
+          });
+        } catch (err) {
+          box.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        }
+      }
+
+      document.getElementById('ann-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const msg = document.getElementById('form-msg');
+        msg.innerHTML = '';
+        const submitBtn = document.querySelector('#ann-form button[type="submit"]');
+        if (submitBtn.disabled) return; // guard against double-submit
+        submitBtn.disabled = true;
+        const fd = new FormData();
+        fd.append('title', document.getElementById('a-title').value.trim());
+        fd.append('description', document.getElementById('a-desc').value.trim());
+        fd.append('category', document.getElementById('a-category').value);
+        fd.append('audience', document.getElementById('a-audience').value);
+        fd.append('expiry_date', document.getElementById('a-expiry').value);
+        const file = fileInput.files[0];
+        if (file) fd.append('announcement_file', file);
+        try {
+          const res = await API.postForm('/announcements', fd);
+          UI.toast(res.message, 'success');
+          modal.style.display = 'none';
+          e.target.reset();
+          filePreview.innerHTML = '';
+          load();
+        } catch (err) {
+          msg.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        } finally {
+          submitBtn.disabled = false;
+        }
+      });
+
+      document.getElementById('f-category').addEventListener('change', load);
+
+      // One delegated listener (kept OUT of load() so filter changes never stack it):
+      // toggles any Read More / Read Less button inside the announcements list.
+      box.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-desc-toggle]');
+        if (!btn) return;
+        const expanded = btn.dataset.expanded !== '1';
+        btn.dataset.expanded = expanded ? '1' : '0';
+        bindDescToggles(btn.closest('.ann-card') || btn.parentElement);
+        btn.scrollIntoView({ block: 'nearest' });
+      });
+
+      load();
+    })();
+  </script>
+</body>
+</html>

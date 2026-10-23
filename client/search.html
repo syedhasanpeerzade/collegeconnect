@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Explore - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/social.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+
+  <div class="social-shell">
+    <aside class="social-sidebar"><nav class="snav" id="snav"></nav></aside>
+
+    <main>
+      <div class="feed-hero">
+        <div>
+          <h1>Explore</h1>
+          <p>Find students, posts, communities, clubs and events.</p>
+        </div>
+      </div>
+
+      <form class="search-bar" id="search-form">
+        <input type="search" id="q" placeholder="Search campus... (try &quot;hackathon&quot;, &quot;coding&quot;, &quot;cricket&quot;)" autocomplete="off">
+        <button class="btn" type="submit">Search</button>
+      </form>
+
+      <div class="chip-row" id="filters" style="margin-bottom:16px">
+        <button class="btn btn-sm" data-type="">Everything</button>
+        <button class="btn btn-sm btn-secondary" data-type="students">People</button>
+        <button class="btn btn-sm btn-secondary" data-type="posts">Posts</button>
+        <button class="btn btn-sm btn-secondary" data-type="communities">Communities</button>
+        <button class="btn btn-sm btn-secondary" data-type="clubs">Clubs</button>
+        <button class="btn btn-sm btn-secondary" data-type="events">Events</button>
+      </div>
+
+      <div id="results"></div>
+    </main>
+
+    <aside class="social-rail">
+      <div class="card rail-card">
+        <h3>&#128293; Trending discussions</h3>
+        <div class="rail-list" id="rail-discussions"></div>
+      </div>
+      <div class="card rail-card">
+        <h3>&#128101; Popular communities</h3>
+        <div class="rail-list" id="rail-communities"></div>
+      </div>
+      <div class="card rail-card">
+        <h3>Trending on campus</h3>
+        <div class="chip-row" id="rail-tags"></div>
+      </div>
+    </aside>
+  </div>
+
+  <nav class="mobile-tabbar" id="tabbar"></nav>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/social.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      Social.chrome('/search.html');
+      Social.mountDiscover({
+        discussions: document.getElementById('rail-discussions'),
+        communities: document.getElementById('rail-communities'),
+        tags: document.getElementById('rail-tags'),
+      });
+
+      const box = document.getElementById('results');
+      const input = document.getElementById('q');
+      let type = '';
+
+      const initial = new URLSearchParams(location.search).get('q');
+      if (initial) input.value = initial;
+
+      function emptyHint() {
+        box.innerHTML = `
+          <div class="card" style="padding:20px">
+            <h3 style="margin-top:0">Start exploring campus</h3>
+            <p style="color:var(--muted);font-size:14px;margin-bottom:14px">
+              Search by name, student ID, keyword, community, club or event. You can also jump straight in:
+            </p>
+            <div class="chip-row">
+              <a class="trend-tag" href="/feed.html?tab=trending">&#128293; Trending posts</a>
+              <a class="trend-tag" href="/communities.html">&#128101; All communities</a>
+              <a class="trend-tag" href="/events.html">&#128197; Browse events</a>
+              <a class="trend-tag" href="/clubs.html">&#127942; Campus clubs</a>
+              <a class="trend-tag" href="/achievements.html">&#127942; Achievements</a>
+            </div>
+          </div>`;
+      }
+
+      async function run() {
+        const q = input.value.trim();
+        const url = new URL(location.href);
+        if (q) url.searchParams.set('q', q); else url.searchParams.delete('q');
+        history.replaceState(null, '', url);
+        if (q.length < 2) { emptyHint(); return; }
+        box.innerHTML = '<div class="card"><div class="skeleton block"></div><div class="skeleton w60"></div></div>';
+        try {
+          const res = await API.get(`/social/search?q=${encodeURIComponent(q)}${type ? `&type=${type}` : ''}`);
+          const d = res.data || {};
+          const sections = [];
+
+          if (d.students && d.students.length) {
+            sections.push(`<div class="card" style="margin-bottom:16px">
+              <div class="notif-panel-head" style="position:static;background:transparent;padding:14px 16px 8px">
+                <h3 style="margin:0">People</h3><span class="result-kind">${d.students.length}</span></div>
+              ${d.students.map((s) => `
+                <a class="result-row" href="/profile.html?id=${s.id}">
+                  ${s.avatar_path ? `<img class="post-avatar avatar-sm" src="${UI.esc(s.avatar_path)}" alt="">`
+                    : `<span class="post-avatar avatar-sm">${UI.esc((s.full_name || '?').charAt(0).toUpperCase())}</span>`}
+                  <span style="flex:1;min-width:0">
+                    <span class="result-title">${UI.esc(s.full_name)}${s.verified ? ' <span class="vbadge">&#10003;</span>' : ''}</span>
+                    <div class="result-sub">${UI.esc(s.account_type !== 'student' ? (s.account_type === 'club' ? 'Verified club' : 'Official college account') : [s.dept_code, s.year ? `Year ${s.year}` : '', s.student_id].filter(Boolean).join(' · '))}</div>
+                  </span>
+                  <span class="result-kind">${UI.esc(s.account_type)}</span>
+                </a>`).join('')}
+            </div>`);
+          }
+
+          if (d.posts && d.posts.length) {
+            sections.push(`<div style="margin-bottom:16px">
+              <h3 style="font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin:0 0 10px">Posts</h3>
+              ${d.posts.map((p) => Social.card(p, Auth.user())).join('')}
+            </div>`);
+          }
+
+          if (d.communities && d.communities.length) {
+            sections.push(`<div class="card" style="margin-bottom:16px;padding:6px 0">
+              <div class="notif-panel-head" style="position:static;background:transparent;padding:14px 16px 8px">
+                <h3 style="margin:0">Communities</h3><span class="result-kind">${d.communities.length}</span></div>
+              ${d.communities.map((c) => `
+                <a class="result-row" href="/community.html?slug=${UI.esc(c.slug)}">
+                  <span class="post-avatar avatar-sm">#</span>
+                  <span style="flex:1;min-width:0">
+                    <span class="result-title">#${UI.esc(c.name)}</span>
+                    <div class="result-sub">${c.member_count} members · ${c.post_count} posts</div>
+                  </span>
+                </a>`).join('')}
+            </div>`);
+          }
+
+          if (d.clubs && d.clubs.length) {
+            sections.push(`<div class="card" style="margin-bottom:16px;padding:6px 0">
+              <div class="notif-panel-head" style="position:static;background:transparent;padding:14px 16px 8px">
+                <h3 style="margin:0">Clubs</h3><span class="result-kind">${d.clubs.length}</span></div>
+              ${d.clubs.map((c) => `
+                <a class="result-row" href="/club-details.html?id=${c.id}">
+                  <span class="post-avatar avatar-sm">&#127942;</span>
+                  <span style="flex:1;min-width:0">
+                    <span class="result-title">${UI.esc(c.name)}</span>
+                    <div class="result-sub">${c.member_count} members · ${UI.esc(c.category || '')}</div>
+                  </span>
+                </a>`).join('')}
+            </div>`);
+          }
+
+          if (d.events && d.events.length) {
+            sections.push(`<div class="card" style="margin-bottom:16px;padding:6px 0">
+              <div class="notif-panel-head" style="position:static;background:transparent;padding:14px 16px 8px">
+                <h3 style="margin:0">Events</h3><span class="result-kind">${d.events.length}</span></div>
+              ${d.events.map((e) => `
+                <a class="result-row" href="/event-details.html?id=${e.id}">
+                  <span class="post-avatar avatar-sm">${e.is_official ? '&#10003;' : '&#128197;'}</span>
+                  <span style="flex:1;min-width:0">
+                    <span class="result-title">${UI.esc(e.title)}</span>
+                    <div class="result-sub">${UI.fmtDate(e.event_date)} · ${UI.esc(e.venue || '')} ${e.is_official ? '· OFFICIAL EVENT' : '· STUDENT EVENT'}</div>
+                  </span>
+                </a>`).join('')}
+            </div>`);
+          }
+
+          box.innerHTML = sections.length ? sections.join('') : UI.empty('No matches', `Nothing found for “${UI.esc(q)}”. Try a different keyword.`);
+          const pendingCards = box.querySelectorAll('.post-card');
+          if (pendingCards.length) Social.bindInteractions(box);
+        } catch (err) {
+          box.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        }
+      }
+
+      document.getElementById('search-form').addEventListener('submit', (e) => { e.preventDefault(); run(); });
+      document.getElementById('filters').addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-type]');
+        if (!btn) return;
+        type = btn.dataset.type;
+        document.querySelectorAll('#filters [data-type]').forEach((b) => {
+          b.classList.toggle('btn-secondary', b !== btn);
+          b.classList.toggle('btn', b === btn);
+        });
+        run();
+      });
+
+      if (input.value.trim().length >= 2) run(); else emptyHint();
+    })();
+  </script>
+</body>
+</html>

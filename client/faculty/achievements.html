@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Achievement Verification - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="container">
+    <div class="page-head">
+      <div><h1>Achievement Verification</h1><div class="sub">Verify submissions so they appear in the public Hall of Fame.</div></div>
+      <select id="f-status">
+        <option value="PENDING_VERIFICATION">Pending verification</option>
+        <option value="">All statuses</option>
+        <option value="VERIFIED">Verified</option>
+        <option value="REJECTED">Rejected</option>
+      </select>
+    </div>
+    <div id="content"><div class="loading">Loading...</div></div>
+  </div>
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      const user = Auth.requireRole(['FACULTY', 'ADMIN']);
+      if (!user) return;
+      const box = document.getElementById('content');
+
+      async function load() {
+        box.innerHTML = UI.loadingBox('Loading achievements...');
+        try {
+          const res = await API.get('/achievements');
+          const status = document.getElementById('f-status').value;
+          let rows = res.data || [];
+          if (status) rows = rows.filter((a) => a.verification_status === status);
+          if (!rows.length) { box.innerHTML = UI.empty('Nothing to verify'); return; }
+
+          box.innerHTML = `<div class="table-wrap"><table>
+            <thead><tr><th>ID</th><th>Title</th><th>Competition</th><th>Year</th><th>Position</th><th>Status</th><th></th></tr></thead>
+            <tbody>${rows.map((a) => `
+              <tr>
+                <td data-label="ID" class="mono">${UI.esc(a.public_id)}</td>
+                <td data-label="Title"><a href="/achievement-details.html?id=${a.id}">${UI.esc(a.title)}</a><br>
+                  <span style="font-size:12px;color:var(--muted)">${[a.winner_names, a.team_name].filter(Boolean).join(', ')}</span></td>
+                <td data-label="Competition">${UI.esc(a.competition_name)}</td>
+                <td data-label="Year">${a.achievement_year}</td>
+                <td data-label="Position">${UI.positionLabel(a.position)}</td>
+                <td data-label="Status">${UI.statusBadge(a.verification_status)}</td>
+                <td data-label="">
+                  ${a.verification_status === 'PENDING_VERIFICATION' ? `
+                    <button class="btn btn-sm" data-verify="${a.id}" data-title="${UI.esc(a.title)}">Verify</button>
+                    <button class="btn btn-sm btn-danger" data-reject="${a.id}" data-title="${UI.esc(a.title)}">Reject</button>` : ''}
+                </td>
+              </tr>`).join('')}</tbody>
+          </table></div>`;
+
+          box.querySelectorAll('[data-verify]').forEach((b) => {
+            b.addEventListener('click', async () => {
+              if (!(await UI.confirm(`Verify "${b.dataset.title}" and publish it in the Hall of Fame?`, { confirmText: 'Verify' }))) return;
+              try {
+                const res = await API.put(`/achievements/${b.dataset.verify}/verify`);
+                UI.toast(res.message, 'success');
+                load();
+              } catch (err) { UI.toast(err.message, 'error'); }
+            });
+          });
+          box.querySelectorAll('[data-reject]').forEach((b) => {
+            b.addEventListener('click', async () => {
+              const reason = await UI.prompt(`Reason for rejecting "${b.dataset.title}":`, {
+                title: 'Reject achievement', multiline: true, confirmText: 'Reject',
+              });
+              if (!reason) return;
+              try {
+                await API.put(`/achievements/${b.dataset.reject}/reject`, { reason });
+                UI.toast('Achievement rejected', 'success');
+                load();
+              } catch (err) { UI.toast(err.message, 'error'); }
+            });
+          });
+        } catch (err) {
+          box.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        }
+      }
+
+      document.getElementById('f-status').addEventListener('change', load);
+      load();
+    })();
+  </script>
+</body>
+</html>

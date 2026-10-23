@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>What are you interested in? - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body class="onboard-page">
+  <nav id="app-nav"></nav>
+  <main class="onboard-wrap">
+    <div class="onboard-card">
+      <h1>What are you interested in?</h1>
+      <p class="onboard-sub">Select your interests and we'll notify you about relevant college events first.</p>
+
+      <div id="interest-grid" class="interest-grid">
+        <div class="loading">Loading...</div>
+      </div>
+
+      <div class="onboard-actions">
+        <button class="btn btn-ghost" id="skip-btn" type="button">Skip for now</button>
+        <button class="btn" id="continue-btn" type="button" disabled>Continue</button>
+      </div>
+      <div id="onboard-msg"></div>
+    </div>
+  </main>
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      const user = Auth.user();
+      if (!user) {
+        location.href = '/login.html?next=' + encodeURIComponent('/onboarding.html');
+        return;
+      }
+      // Onboarding is for students; everyone else goes to their dashboard.
+      if (user.role !== 'STUDENT') {
+        location.href = Auth.dashboardFor(user.role);
+        return;
+      }
+
+      const grid = document.getElementById('interest-grid');
+      const continueBtn = document.getElementById('continue-btn');
+      const skipBtn = document.getElementById('skip-btn');
+      const msg = document.getElementById('onboard-msg');
+      const selected = new Set();
+
+      // Pre-select previously saved interests (if returning via a stale link)
+      try {
+        const st = await API.get('/interests/status');
+        (st.data.interests || []).forEach((k) => selected.add(k));
+      } catch (_e) { /* ignore */ }
+
+      try {
+        const res = await API.get('/interests/options');
+        const options = res.data || [];
+        grid.innerHTML = options.map((o) => `
+          <button type="button" class="interest-chip ${selected.has(o.key) ? 'selected' : ''}"
+                  data-key="${UI.esc(o.key)}" aria-pressed="${selected.has(o.key)}">
+            <span class="ic-icon">${o.icon}</span>
+            <span class="ic-label">${UI.esc(o.label)}</span>
+            <span class="ic-desc">${UI.esc(o.description)}</span>
+            <span class="ic-check">&#10003;</span>
+          </button>`).join('');
+      } catch (err) {
+        grid.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        return;
+      }
+
+      function syncState() {
+        continueBtn.disabled = selected.size === 0;
+        grid.querySelectorAll('.interest-chip').forEach((chip) => {
+          const on = selected.has(chip.dataset.key);
+          chip.classList.toggle('selected', on);
+          chip.setAttribute('aria-pressed', on);
+        });
+      }
+      syncState();
+
+      grid.addEventListener('click', (e) => {
+        const chip = e.target.closest('.interest-chip');
+        if (!chip) return;
+        const key = chip.dataset.key;
+        if (selected.has(key)) selected.delete(key); else selected.add(key);
+        syncState();
+      });
+
+      continueBtn.addEventListener('click', async () => {
+        continueBtn.disabled = true;
+        msg.innerHTML = '';
+        try {
+          const res = await API.put('/interests', { interests: [...selected] });
+          UI.toast(res.message || 'Interests saved', 'success');
+          location.href = nextTarget();
+        } catch (err) {
+          msg.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+          continueBtn.disabled = false;
+        }
+      });
+
+      skipBtn.addEventListener('click', async () => {
+        skipBtn.disabled = true;
+        try {
+          await API.put('/interests', { interests: [], skip: true });
+          UI.toast('You can set your interests anytime from Profile', 'info');
+          location.href = nextTarget();
+        } catch (err) {
+          msg.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+          skipBtn.disabled = false;
+        }
+      });
+
+      function nextTarget() {
+        const next = new URLSearchParams(location.search).get('next');
+        return next && next.startsWith('/') ? next : '/dashboard.html';
+      }
+    })();
+  </script>
+</body>
+</html>

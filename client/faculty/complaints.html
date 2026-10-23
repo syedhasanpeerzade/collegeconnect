@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Complaint Management - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="container">
+    <div class="page-head">
+      <div><h1>Complaint Management</h1><div class="sub">All student complaints across campus.</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <select id="f-status">
+          <option value="">All statuses</option>
+          <option>SUBMITTED</option><option>UNDER_REVIEW</option><option>ASSIGNED</option>
+          <option>IN_PROGRESS</option><option>RESOLVED</option><option>CLOSED</option><option>REOPENED</option>
+        </select>
+        <select id="f-priority">
+          <option value="">All priorities</option>
+          <option>URGENT</option><option>HIGH</option><option>MEDIUM</option><option>LOW</option>
+        </select>
+        <select id="f-category">
+          <option value="">All categories</option>
+          <option>INFRASTRUCTURE</option><option>CLASSROOM</option><option>LABORATORY</option>
+          <option>WIFI</option><option>HOSTEL</option><option>CANTEEN</option>
+          <option>LIBRARY</option><option>TRANSPORT</option><option>ACADEMICS</option><option>OTHER</option>
+        </select>
+      </div>
+    </div>
+    <div id="content"><div class="loading">Loading...</div></div>
+  </div>
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      const user = Auth.requireRole(['FACULTY', 'ADMIN']);
+      if (!user) return;
+      const box = document.getElementById('content');
+
+      async function load() {
+        box.innerHTML = UI.loadingBox('Loading complaints...');
+        try {
+          const p = new URLSearchParams();
+          const s = document.getElementById('f-status').value;
+          const pr = document.getElementById('f-priority').value;
+          const c = document.getElementById('f-category').value;
+          if (s) p.set('status', s);
+          if (pr) p.set('priority', pr);
+          if (c) p.set('category', c);
+          const res = await API.get(`/complaints?${p.toString()}`);
+          const rows = res.data || [];
+          if (!rows.length) { box.innerHTML = UI.empty('No complaints match the filters'); return; }
+          box.innerHTML = `<div class="table-wrap"><table>
+            <thead><tr><th>ID</th><th>Title</th><th>Student</th><th>Category</th><th>Priority</th><th>Status</th><th>Assigned to</th><th></th></tr></thead>
+            <tbody>${rows.map((c2) => `
+              <tr>
+                <td data-label="ID" class="mono">${UI.esc(c2.public_id)}</td>
+                <td data-label="Title">${UI.esc(c2.title)}</td>
+                <td data-label="Student">${UI.esc(c2.student_name)}<br><span style="font-size:12px;color:var(--muted)">${UI.esc(c2.department_code || '-')}</span></td>
+                <td data-label="Category">${UI.categoryLabel(c2.category)}</td>
+                <td data-label="Priority">${UI.statusBadge(c2.priority)}</td>
+                <td data-label="Status">${UI.statusBadge(c2.status)}</td>
+                <td data-label="Assigned">${UI.esc(c2.assigned_to || '-')}</td>
+                <td data-label=""><a class="btn btn-sm btn-secondary" href="/complaint-details.html?id=${c2.id}">Open</a></td>
+              </tr>`).join('')}</tbody>
+          </table></div>`;
+        } catch (err) {
+          box.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        }
+      }
+
+      ['f-status', 'f-priority', 'f-category'].forEach((id) =>
+        document.getElementById(id).addEventListener('change', load));
+      load();
+    })();
+  </script>
+</body>
+</html>

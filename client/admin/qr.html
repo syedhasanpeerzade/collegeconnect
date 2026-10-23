@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>College Event QR Code - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="container">
+    <div class="admin-layout">
+      <aside class="side-nav">
+        <a href="/admin/index.html">Dashboard</a>
+        <a href="/admin/users.html">Users</a>
+        <a href="/admin/content.html">Manage Content</a>
+        <a href="/admin/import.html">Bulk Import</a>
+        <a href="/admin/approvals.html">Event Approvals</a>
+        <a href="/admin/achievements.html">Achievements</a>
+        <a href="/admin/qr.html" class="active">College QR Code</a>
+        <a href="/admin/reports.html">Reports</a>
+        <a href="/faculty/complaints.html">Complaints</a>
+        <a href="/announcements.html">Announcements</a>
+      </aside>
+      <main>
+        <div class="page-head">
+          <div><h1>College Event QR Code</h1>
+            <div class="sub">One permanent code for the whole campus. It always points to the events page.</div></div>
+        </div>
+
+        <div class="grid grid-2">
+          <div class="card">
+            <div class="qr-stage">
+              <img id="qr-img" alt="CollegeConnect QR code" width="300" height="300">
+            </div>
+            <div style="display:flex;gap:10px;justify-content:center;margin-top:16px;flex-wrap:wrap">
+              <a class="btn" href="/api/qr/download" download>Download QR</a>
+              <button class="btn btn-secondary" id="print-btn">Print QR</button>
+            </div>
+          </div>
+          <div class="card">
+            <h3>How this works</h3>
+            <dl class="kv">
+              <dt>Destination URL</dt><dd class="mono" id="qr-url">...</dd>
+              <dt>Scope</dt><dd>All approved and published events - never a single event</dd>
+              <dt>Rotation</dt><dd>Stays the same all academic year; changes only if the platform address changes</dd>
+            </dl>
+            <hr class="divider">
+            <p style="font-size:14px;color:var(--ink-soft)">Print this code and display it on notice boards, canteen tables and department corridors. Students scan it, see every live event with real-time seat counts, and register on the spot. Event posters never go out of date because the QR code never points at a single event.</p>
+            <p class="hint">The destination comes from <code>APP_URL</code> in the server environment. After deploying to a new address, the code regenerates automatically and posters must be reprinted once.</p>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      const user = Auth.requireRole(['ADMIN']);
+      if (!user) return;
+      try {
+        const res = await API.get('/qr');
+        document.getElementById('qr-img').src = res.data.data_url;
+        document.getElementById('qr-url').textContent = res.data.destination;
+      } catch (err) {
+        UI.toast(err.message, 'error');
+      }
+      document.getElementById('print-btn').addEventListener('click', () => window.print());
+    })();
+  </script>
+</body>
+</html>

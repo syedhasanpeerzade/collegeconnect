@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Event Management - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <style>
+    .event-stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 18px; }
+    .event-stat { background: var(--card, #fff); border: 1px solid var(--border, #e6e9f0); border-radius: 12px; padding: 14px 16px; }
+    .event-stat .k { font-size: 12px; color: var(--muted, #667); }
+    .event-stat .v { font-size: 24px; font-weight: 700; color: var(--primary, #2450c4); }
+    .filters-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+    .filters-row input, .filters-row select { padding: 8px 10px; border: 1px solid var(--border, #dfe3ea); border-radius: 8px; font: inherit; font-size: 13.5px; }
+    .poster-thumb { width: 64px; height: 42px; object-fit: cover; border-radius: 6px; display: block; }
+    .event-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 720px) { .event-form-grid { grid-template-columns: 1fr; } }
+    .event-form-grid .full { grid-column: 1 / -1; }
+  </style>
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="container">
+    <div class="admin-layout">
+      <aside class="side-nav">
+        <a href="/admin/index.html">Dashboard</a>
+        <a href="/admin/events.html" class="active">Events</a>
+        <a href="/admin/users.html">Users</a>
+        <a href="/admin/content.html">Manage Content</a>
+        <a href="/admin/import.html">Bulk Import</a>
+        <a href="/admin/approvals.html">Event Approvals</a>
+        <a href="/admin/achievements.html">Achievements</a>
+        <a href="/admin/qr.html">College QR Code</a>
+        <a href="/admin/reports.html">Reports</a>
+        <a href="/faculty/complaints.html">Complaints</a>
+        <a href="/announcements.html">Announcements</a>
+      </aside>
+
+      <main>
+        <div class="page-head">
+          <div>
+            <h1>Event Management</h1>
+            <div class="sub">Create, publish, edit and retire college events. Published events appear instantly across the Events page, dashboard and feed.</div>
+          </div>
+          <button class="btn" id="btn-add">+ Add Event</button>
+        </div>
+
+        <div id="stats" class="event-stat-row">
+          <div class="event-stat"><div class="k">Total events</div><div class="v" id="st-total">–</div></div>
+          <div class="event-stat"><div class="k">Upcoming (published)</div><div class="v" id="st-upcoming">–</div></div>
+          <div class="event-stat"><div class="k">Drafts</div><div class="v" id="st-drafts">–</div></div>
+          <div class="event-stat"><div class="k">Completed</div><div class="v" id="st-completed">–</div></div>
+          <div class="event-stat"><div class="k">Cancelled</div><div class="v" id="st-cancelled">–</div></div>
+        </div>
+
+        <div class="filters-row">
+          <input type="search" id="q" placeholder="Search title / venue..." style="min-width:220px" aria-label="Search events">
+          <select id="f-category" aria-label="Category filter">
+            <option value="">All categories</option>
+            <option>TECHNICAL</option><option>CULTURAL</option><option>SPORTS</option><option>WORKSHOP</option>
+            <option>SEMINAR</option><option>COMPETITION</option><option>FEST</option><option>CLUB_EVENT</option>
+            <option>CAREER</option><option>ARTS</option><option>OTHER</option>
+          </select>
+          <select id="f-state" aria-label="Status filter">
+            <option value="">All statuses</option>
+            <option value="draft">Draft</option>
+            <option value="published">Published (open/upcoming)</option>
+            <option value="registration_open">Registration open</option>
+            <option value="registration_closed">Registration closed</option>
+            <option value="SCHEDULED">Scheduled</option>
+            <option value="ONGOING">Ongoing</option>
+            <option value="COMPLETED">Completed</option>
+            <option value="CANCELLED">Cancelled</option>
+          </select>
+          <select id="f-sort" aria-label="Sort">
+            <option value="date_desc">Date: newest first</option>
+            <option value="date_asc">Date: soonest first</option>
+            <option value="regs_desc">Most registered</option>
+          </select>
+          <button class="btn btn-sm" id="f-apply">Apply</button>
+          <button class="btn btn-sm btn-secondary" id="f-clear">Clear</button>
+        </div>
+
+        <div id="tbl"></div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Add / Edit event modal -->
+  <div class="modal-overlay" id="ev-modal" style="display:none">
+    <div class="modal" style="max-width:820px;max-height:92vh;overflow:auto">
+      <form id="ev-form" class="event-form" style="padding:0">
+        <div class="ach-form-bar">
+          <div class="ach-form-title">
+            <h3 id="ev-form-title">Add Event</h3>
+            <span class="ach-form-sub" id="ev-form-sub">Saving as draft keeps the event invisible to students until you publish it.</span>
+          </div>
+          <div class="ach-form-actions">
+            <button type="button" class="btn btn-secondary" id="ev-close">Cancel</button>
+            <button type="submit" class="btn" id="ev-save" form="ev-form">Save Event</button>
+          </div>
+        </div>
+        <div class="event-form-grid">
+          <div class="field full">
+            <label for="ev-title">Event Title <span class="req">*</span></label>
+            <input id="ev-title" required placeholder="e.g. Inter-College Hackathon 2026">
+          </div>
+          <div class="field full">
+            <label for="ev-desc">Description <span class="req">*</span></label>
+            <textarea id="ev-desc" required maxlength="5000" placeholder="What is this event about? Who should attend?"></textarea>
+          </div>
+          <div class="field">
+            <label for="ev-category">Category <span class="req">*</span></label>
+            <select id="ev-category" required>
+              <option value="">Select category</option>
+              <option>TECHNICAL</option><option>CULTURAL</option><option>SPORTS</option><option>WORKSHOP</option>
+              <option>SEMINAR</option><option>COMPETITION</option><option>FEST</option><option>CLUB_EVENT</option>
+              <option>CAREER</option><option>ARTS</option><option>OTHER</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="ev-type">Event Type</label>
+            <select id="ev-type">
+              <option value="COLLEGE_WIDE">College-wide</option>
+              <option value="DEPARTMENT">Department</option>
+              <option value="CLUB">Club</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="ev-dept">Organizing Department</label>
+            <select id="ev-dept"><option value="">None</option></select>
+          </div>
+          <div class="field">
+            <label for="ev-club">Organizing Club</label>
+            <select id="ev-club"><option value="">None</option></select>
+          </div>
+          <div class="field">
+            <label for="ev-venue">Venue <span class="req">*</span></label>
+            <input id="ev-venue" required placeholder="e.g. Main Auditorium">
+          </div>
+          <div class="field">
+            <label for="ev-date">Event Date <span class="req">*</span></label>
+            <input type="date" id="ev-date" required>
+          </div>
+          <div class="field">
+            <label for="ev-start">Start Time <span class="req">*</span></label>
+            <input type="time" id="ev-start" required>
+          </div>
+          <div class="field">
+            <label for="ev-end">End Time <span class="req">*</span></label>
+            <input type="time" id="ev-end" required>
+          </div>
+          <div class="field">
+            <label for="ev-deadline">Registration Deadline</label>
+            <input type="date" id="ev-deadline">
+          </div>
+          <div class="field">
+            <label for="ev-max">Max Participants</label>
+            <input type="number" id="ev-max" min="1" value="100">
+          </div>
+          <div class="field full">
+            <label for="ev-eligibility">Eligibility Criteria <span class="hint">(optional)</span></label>
+            <input id="ev-eligibility" placeholder="e.g. Open to all departments; 2nd year and above">
+          </div>
+          <div class="field full">
+            <label for="ev-contact">Contact Information <span class="hint">(optional)</span></label>
+            <input id="ev-contact" placeholder="e.g. events@college.edu / Dr. Rao - 98xxx">
+          </div>
+          <div class="field full">
+            <label for="ev-rules">Rules <span class="hint">(optional)</span></label>
+            <textarea id="ev-rules" maxlength="3000" style="min-height:60px" placeholder="Participation rules..."></textarea>
+          </div>
+          <div class="field full">
+            <label>Event Poster / Banner <span class="hint">(JPEG/PNG/WebP up to 5 MB)</span></label>
+            <input type="file" id="ev-poster" accept="image/jpeg,image/png,image/webp">
+            <div class="upload-hint" id="ev-poster-hint"></div>
+          </div>
+          <div class="field full">
+            <label>Registration Option</label>
+            <div class="hint">Students register through College Connect itself (max participants + deadline control it). The event status controls when registration opens/closes.</div>
+          </div>
+          <div class="field full">
+            <label for="ev-publish">Visibility</label>
+            <select id="ev-publish">
+              <option value="1" id="opt-published">Published - visible to students now</option>
+              <option value="0">Draft - not visible to students</option>
+            </select>
+          </div>
+        </div>
+        <div id="ev-form-msg"></div>
+      </form>
+    </div>
+  </div>
+
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      const user = Auth.requireRole(['ADMIN', 'FACULTY']);
+      if (!user) return;
+
+      const tbl = document.getElementById('tbl');
+      let all = [];
+      const deptCache = {};
+
+      // Derived display state, mapped to the existing data model:
+      //   Draft              -> is_published = 0
+      //   Registration open  -> published, deadline in the future, not ended
+      //   Registration closed-> published, deadline passed, event not over yet
+      //   Scheduled/Ongoing/Completed/Cancelled -> status column
+      function stateOf(e) {
+        const today = new Date().toISOString().slice(0, 10);
+        if (!Number(e.is_published)) return { key: 'draft', label: 'Draft', cls: 'amber' };
+        if (e.status === 'COMPLETED') return { key: 'COMPLETED', label: 'Completed', cls: 'gray' };
+        if (e.status === 'CANCELLED') return { key: 'CANCELLED', label: 'Cancelled', cls: 'red' };
+        if (e.status === 'ONGOING') return { key: 'ONGOING', label: 'Ongoing', cls: 'teal' };
+        const deadlinePassed = e.registration_deadline && String(e.registration_deadline) < today;
+        if (e.registration_deadline && !deadlinePassed) return { key: 'registration_open', label: 'Registration Open', cls: 'green' };
+        if (e.registration_deadline && deadlinePassed) return { key: 'registration_closed', label: 'Registration Closed', cls: 'blue' };
+        return { key: 'SCHEDULED', label: 'Published', cls: 'teal' };
+      }
+
+      async function loadRefs() {
+        try {
+          const [d, c] = await Promise.all([API.get('/admin/departments'), API.get('/clubs')]);
+          const depts = d.data || [];
+          const clubs = c.data || [];
+          deptCache.depts = depts; deptCache.clubs = clubs;
+          document.getElementById('ev-dept').innerHTML = '<option value="">None</option>' +
+            depts.map((dd) => `<option value="${dd.id}">${UI.esc(dd.name || dd.code)}</option>`).join('');
+          document.getElementById('ev-club').innerHTML = '<option value="">None</option>' +
+            clubs.map((cc) => `<option value="${cc.id}">${UI.esc(cc.name)}</option>`).join('');
+        } catch (_e) { /* selects remain empty; form still validates server-side */ }
+      }
+
+      async function loadStats() {
+        try {
+          const res = await API.get('/admin/content/event-stats');
+          const s = res.data || {};
+          document.getElementById('st-total').textContent = s.total ?? '–';
+          document.getElementById('st-upcoming').textContent = s.upcoming ?? '–';
+          document.getElementById('st-drafts').textContent = s.drafts ?? '–';
+          document.getElementById('st-completed').textContent = s.completed ?? '–';
+          document.getElementById('st-cancelled').textContent = s.cancelled ?? '–';
+        } catch (_e) { /* stats are best-effort */ }
+      }
+
+      function filtered() {
+        const q = document.getElementById('q').value.trim().toLowerCase();
+        const cat = document.getElementById('f-category').value;
+        const st = document.getElementById('f-state').value;
+        const sort = document.getElementById('f-sort').value;
+        let rows = all.filter((e) => {
+          if (q && !(`${e.title} ${e.venue}`.toLowerCase().includes(q))) return false;
+          if (cat && e.category !== cat) return false;
+          if (st) {
+            const k = stateOf(e).key;
+            if (st === 'published' ? !['draft', 'registration_open', 'SCHEDULED', 'ONGOING'].includes(k) : k !== st) return false;
+          }
+          return true;
+        });
+        rows.sort((a, b) => {
+          if (sort === 'date_asc') return String(a.event_date).localeCompare(String(b.event_date));
+          if (sort === 'regs_desc') return (b.registration_count || 0) - (a.registration_count || 0);
+          return String(b.event_date).localeCompare(String(a.event_date));
+        });
+        return rows;
+      }
+
+      async function render() {
+        tbl.innerHTML = UI.loadingBox('Loading events...');
+        try {
+          const res = await API.get('/admin/content/events');
+          all = res.data || [];
+        } catch (err) {
+          tbl.innerHTML = `<div class="error-box">${UI.esc(err.message)}
+            <div style="margin-top:8px"><button class="btn btn-sm" onclick="location.reload()">Retry</button></div></div>`;
+          return;
+        }
+        const rows = filtered();
+        if (!rows.length) {
+          tbl.innerHTML = UI.empty('No events match these filters', all.length ? 'Try clearing the filters.' : 'Use “+ Add Event” to create the first one.');
+          return;
+        }
+        tbl.innerHTML = `<div class="table-wrap"><table>
+          <thead><tr><th>ID</th><th>Title</th><th>When</th><th>Venue</th><th>Status</th><th>Regs</th><th style="white-space:nowrap">Actions</th></tr></thead>
+          <tbody>${rows.map((e) => {
+            const st = stateOf(e);
+            const id = e.id;
+            return `<tr>
+              <td data-label="ID" class="mono">${UI.esc(e.public_id)}${e.poster_path ? `<img class="poster-thumb" src="${UI.esc(e.poster_path)}" alt="">` : ''}</td>
+              <td data-label="Title"><a href="/event-details.html?id=${e.id}">${UI.esc(e.title)}</a>
+                <div class="hint">${UI.esc(e.organizer_name || '')}${e.club_id ? ' · club' : ''}${e.department_id ? ' · dept' : ''}</div></td>
+              <td data-label="When">${UI.fmtDate(e.event_date)}<div class="hint">${UI.fmtTime(e.start_time)}${e.end_time ? '–' + UI.fmtTime(e.end_time) : ''}</div></td>
+              <td data-label="Venue">${UI.esc(e.venue)}</td>
+              <td data-label="Status">${UI.statusBadge(st.key === 'draft' ? 'PENDING_VERIFICATION' : st.key)}<div class="hint">${st.label}</div></td>
+              <td data-label="Regs">${e.registration_count}${e.max_participants ? ` / ${e.max_participants}` : ''}</td>
+              <td data-label="Actions" style="white-space:nowrap">
+                <button class="btn btn-sm btn-secondary" data-edit="${id}">Edit</button>
+                ${e.status !== 'COMPLETED' && e.status !== 'CANCELLED' ? `
+                  <button class="btn btn-sm btn-secondary" data-status="${id}" data-next="COMPLETED">Complete</button>
+                  <button class="btn btn-sm btn-danger" data-status="${id}" data-next="CANCELLED">Cancel</button>` : e.status === 'CANCELLED' ? `
+                  <button class="btn btn-sm btn-secondary" data-status="${id}" data-next="SCHEDULED">Reopen</button>` : ''}
+                ${Number(e.is_published)
+                  ? `<button class="btn btn-sm btn-secondary" data-status="${id}" data-next="DRAFT">Unpublish</button>`
+                  : `<button class="btn btn-sm" data-status="${id}" data-next="PUBLISHED">Publish</button>`}
+                <button class="btn btn-sm btn-danger" data-del="${id}" data-title="${UI.esc(e.title)}">Delete</button>
+              </td>
+            </tr>`;
+          }).join('')}</tbody></table></div>`;
+
+        tbl.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => {
+          const ev = all.find((x) => x.id === +b.dataset.edit);
+          if (ev) openEdit(ev);
+        }));
+        tbl.querySelectorAll('[data-status]').forEach((b) => b.addEventListener('click', async () => {
+          const next = b.dataset.next;
+          const ev = all.find((x) => x.id === +b.dataset.status);
+          if (next === 'CANCELLED' || next === 'COMPLETED') {
+            const okd = await UI.confirm(`"${ev.title}" will be marked as ${next.toLowerCase()}. Registered students are notified for cancellations.`, { title: 'Change status', confirmText: 'Confirm' });
+            if (!okd) return;
+          }
+          try {
+            const r = await API.put(`/events/${b.dataset.status}/status`, { status: next });
+            UI.toast(r.message, 'success');
+            await render(); await loadStats();
+          } catch (err) { UI.toast(err.message, 'error'); }
+        }));
+        tbl.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', async () => {
+          const okd = await UI.confirm(`Permanently delete "${b.dataset.title}"? Registration records tied to it are removed with it. This cannot be undone.`, { title: 'Delete event', confirmText: 'Delete forever' });
+          if (!okd) return;
+          try {
+            const r = await API.del(`/events/${b.dataset.del}`);
+            UI.toast(r.message, 'success');
+            await render(); await loadStats();
+          } catch (err) { UI.toast(err.message, 'error'); }
+        }));
+      }
+
+      // ---- Add / Edit ----
+      const modal = document.getElementById('ev-modal');
+      const form = document.getElementById('ev-form');
+      let editId = null;
+      document.getElementById('btn-add').addEventListener('click', () => openEdit(null));
+      document.getElementById('ev-close').addEventListener('click', () => { modal.style.display = 'none'; });
+      modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
+
+      const posterPicker = UI.bindFilePicker(
+        document.getElementById('ev-poster'),
+        document.getElementById('ev-poster-hint'),
+        { accept: '.jpg,.jpeg,.png,.webp', maxMB: 5 },
+      );
+
+      function openEdit(ev) {
+        editId = ev ? ev.id : null;
+        document.getElementById('ev-form-title').textContent = ev ? 'Edit Event' : 'Add Event';
+        document.getElementById('ev-form-sub').textContent = ev
+          ? `Editing ${ev.public_id}. Press Save to persist changes — registered students are notified automatically.`
+          : 'Saving as draft keeps the event invisible to students until you publish it.';
+        document.getElementById('ev-title').value = ev ? ev.title : '';
+        document.getElementById('ev-desc').value = ev ? ev.description : '';
+        document.getElementById('ev-category').value = ev ? ev.category : '';
+        document.getElementById('ev-type').value = ev ? ev.event_type : 'COLLEGE_WIDE';
+        document.getElementById('ev-dept').value = ev ? (ev.department_id || '') : '';
+        document.getElementById('ev-club').value = ev ? (ev.club_id || '') : '';
+        document.getElementById('ev-venue').value = ev ? ev.venue : '';
+        document.getElementById('ev-date').value = ev ? ev.event_date : '';
+        document.getElementById('ev-start').value = ev ? (String(ev.start_time || '').slice(0, 5)) : '';
+        document.getElementById('ev-end').value = ev ? (String(ev.end_time || '').slice(0, 5)) : '';
+        document.getElementById('ev-deadline').value = ev ? (ev.registration_deadline || '') : '';
+        document.getElementById('ev-max').value = ev ? ev.max_participants : 100;
+        document.getElementById('ev-eligibility').value = ev ? (ev.eligibility || '') : '';
+        document.getElementById('ev-contact').value = ev ? (ev.contact_details || '') : '';
+        document.getElementById('ev-rules').value = ev ? (ev.rules || '') : '';
+        document.getElementById('ev-publish').value = ev ? String(Number(ev.is_published)) : '1';
+        posterPicker.reset();
+        document.getElementById('ev-form-msg').innerHTML = '';
+        modal.style.display = 'flex';
+        document.getElementById('ev-title').focus();
+      }
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const msg = document.getElementById('ev-form-msg');
+        msg.innerHTML = '';
+        const title = document.getElementById('ev-title').value.trim();
+        const desc = document.getElementById('ev-desc').value.trim();
+        const category = document.getElementById('ev-category').value;
+        const venue = document.getElementById('ev-venue').value.trim();
+        const date = document.getElementById('ev-date').value;
+        const start = document.getElementById('ev-start').value;
+        const end = document.getElementById('ev-end').value;
+        const deadline = document.getElementById('ev-deadline').value;
+        if (!title || !desc || !category || !venue || !date || !start) {
+          msg.innerHTML = '<div class="error-box">Please fill in every required field (* marked).</div>';
+          return;
+        }
+        if (deadline && deadline > date) {
+          msg.innerHTML = '<div class="error-box">Registration deadline cannot be after the event date.</div>';
+          return;
+        }
+        const saveBtn = document.getElementById('ev-save');
+        saveBtn.disabled = true;
+        try {
+          const fd = new FormData();
+          fd.append('title', title);
+          fd.append('description', desc);
+          fd.append('category', category);
+          fd.append('event_type', document.getElementById('ev-type').value);
+          fd.append('department_id', document.getElementById('ev-dept').value || '');
+          fd.append('club_id', document.getElementById('ev-club').value || '');
+          fd.append('venue', venue);
+          fd.append('event_date', date);
+          fd.append('start_time', start);
+          fd.append('end_time', end);
+          fd.append('registration_deadline', deadline);
+          fd.append('max_participants', document.getElementById('ev-max').value || '100');
+          fd.append('eligibility', document.getElementById('ev-eligibility').value.trim());
+          fd.append('contact_details', document.getElementById('ev-contact').value.trim());
+          fd.append('rules', document.getElementById('ev-rules').value.trim());
+          fd.append('is_published', document.getElementById('ev-publish').value);
+          const poster = posterPicker.getFiles()[0];
+          if (poster) fd.append('poster', poster);
+          if (editId) {
+            const r = await API.putForm(`/events/${editId}`, fd);
+            UI.toast(r.message || 'Event updated', 'success');
+          } else {
+            const r = await API.postForm('/events', fd);
+            UI.toast(r.message || 'Event created', 'success');
+          }
+          modal.style.display = 'none';
+          await render(); await loadStats();
+        } catch (err) {
+          msg.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        } finally {
+          saveBtn.disabled = false;
+        }
+      });
+
+      document.getElementById('f-apply').addEventListener('click', render);
+      document.getElementById('q').addEventListener('keydown', (e) => { if (e.key === 'Enter') render(); });
+      document.getElementById('f-clear').addEventListener('click', () => {
+        ['q'].forEach((id) => { document.getElementById(id).value = ''; });
+        ['f-category', 'f-state'].forEach((id) => { document.getElementById(id).value = ''; });
+        document.getElementById('f-sort').value = 'date_desc';
+        render();
+      });
+
+      await loadRefs();
+      await loadStats();
+      await render();
+    })();
+  </script>
+</body>
+</html>

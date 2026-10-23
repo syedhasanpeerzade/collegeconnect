@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="container-narrow">
+    <h1>Privacy Policy</h1>
+    <p class="sub" style="color:var(--muted)">Last updated: September 2026</p>
+
+    <p>CollegeConnect stores the minimum information needed to run campus events, clubs, complaints and achievements. This page explains what is collected, who can see it, and how it is protected.</p>
+
+    <div class="card" style="margin-bottom:16px">
+      <h3>What we collect</h3>
+      <ul style="margin:0;padding-left:20px">
+        <li><b>Account details:</b> full name, student/staff ID, college email, phone, department, year, role and a securely hashed password (passwords are never stored in readable form).</li>
+        <li><b>Platform activity:</b> event registrations, club applications, complaints you submit, notifications and login timestamps.</li>
+        <li><b>Uploads:</b> event posters, proposals, complaint photos and achievement media that you choose to attach.</li>
+      </ul>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <h3>Who can see your data</h3>
+      <ul style="margin:0;padding-left:20px">
+        <li>Students see other students' public profile name within clubs they belong to, and organizer contact details on events.</li>
+        <li>Club coordinators see applications (including contact details) only for clubs they coordinate.</li>
+        <li>Faculty and administrators can view complaint details and user records needed to resolve issues.</li>
+        <li>Staff never see your password; nobody does - it is stored only as a bcrypt hash.</li>
+      </ul>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <h3>How your data is protected</h3>
+      <ul style="margin:0;padding-left:20px">
+        <li>Passwords are hashed with bcrypt; sessions use signed JWT tokens that expire.</li>
+        <li>Access to every API endpoint is checked against your role on the server, not just in the interface.</li>
+        <li>Uploaded files are stored with randomized names and are never executed; dangerous file types are rejected.</li>
+        <li>All database queries use parameterized statements to prevent injection.</li>
+      </ul>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <h3>What we do not do</h3>
+      <p style="margin:0">We do not sell or share your personal data with anyone outside the college. We do not use tracking or advertising cookies. We do not send marketing email - notifications are in-app only.</p>
+    </div>
+
+    <div class="card">
+      <h3>Retention and your choices</h3>
+      <p style="margin:0">Registration and complaint records are kept for the academic year and then archived per college policy. You may correct your profile details and change your password at any time. For data corrections or deletion requests, contact the administration office. Demo achievements and winners in this deployment are clearly labelled sample data, not real student records.</p>
+    </div>
+  </div>
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+</body>
+</html>

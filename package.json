@@ -1,0 +1,31 @@
+{
+  "name": "collegeconnect",
+  "version": "1.0.0",
+  "description": "One Platform for Your Campus - centralized college management platform",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "node server/server.js",
+    "db:init": "node database/init.js",
+    "db:init:seed": "node database/init.js --seed",
+    "db:seed": "node database/init.js seed",
+    "test": "node test/api.test.js",
+    "db:seed:events": "node database/seed-sample-events.js",
+    "db:seed:results": "node database/seed-latest-results.js",
+    "db:seed:announcements": "node database/seed-announcements.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-validator": "^7.1.0",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "multer": "^2.4.0",
+    "pg": "^8.23.0",
+    "qrcode": "^1.5.4"
+  }
+}

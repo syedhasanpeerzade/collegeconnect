@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CollegeConnect - One Platform for Your Campus</title>
+  <meta name="description" content="Discover events, join clubs, organize activities, submit complaints, and stay connected with your college community.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230f6b66'/><text x='50' y='68' font-size='52' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'>CC</text></svg>">
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+
+  <header class="hero">
+    <div class="hero-inner">
+      <div>
+        <h1>CollegeConnect</h1>
+        <div class="tagline">One Platform for Your Campus</div>
+        <p class="desc">Discover events, join clubs, organize activities, submit complaints, and stay connected with your college community - from a single login.</p>
+        <div class="hero-actions">
+          <a class="btn btn-lg" href="/events.html">Explore Events</a>
+          <a class="btn btn-lg btn-secondary" href="/clubs.html">Explore Clubs</a>
+          <a class="btn btn-lg btn-ghost" href="/login.html">Login</a>
+          <a class="btn btn-lg btn-ghost" href="/register.html">Register</a>
+        </div>
+      </div>
+      <div class="hero-panel">
+        <h3 style="margin-top:0;text-align:center">Scan. Discover. Participate.</h3>
+        <img src="/api/qr" alt="CollegeConnect QR code linking to the events page" width="220" height="220" style="border:1px solid var(--line);border-radius:8px;padding:8px;background:#fff">
+        <p class="hp-note">One permanent QR code is displayed across campus. Scanning it opens the live list of approved events - no separate code per event, no outdated posters.</p>
+      </div>
+    </div>
+  </header>
+
+  <section class="land-section">
+    <h2>Everything your campus runs on</h2>
+    <div class="feature-list">
+      <div class="card">
+        <h3>Upcoming Events</h3>
+        <p>Hackathons, fests, workshops and tournaments with live seat counts and registration deadlines.</p>
+      </div>
+      <div class="card">
+        <h3>College Clubs</h3>
+        <p>Browse active clubs, read what they do, and apply during recruitment with a single application form.</p>
+      </div>
+      <div class="card">
+        <h3>Announcements</h3>
+        <p>Official notices from the administration, sorted by category and always current.</p>
+      </div>
+      <div class="card">
+        <h3>Complaint Management</h3>
+        <p>Report campus issues and follow every status change - from submitted to resolved - in one timeline.</p>
+      </div>
+      <div class="card">
+        <h3>Event Registration</h3>
+        <p>Register in seconds and get a unique registration ID. Capacity and deadlines are enforced in real time.</p>
+      </div>
+      <div class="card">
+        <h3>Club Recruitment</h3>
+        <p>Coordinators review applications, add their own questions and build their teams each semester.</p>
+      </div>
+      <div class="card">
+        <h3>Achievements &amp; Hall of Fame</h3>
+        <p>Verified competition winners, club accomplishments and student awards - year by year.</p>
+      </div>
+      <div class="card">
+        <h3>Event Proposals</h3>
+        <p>Organizers submit proposals, faculty review them, and approved events publish automatically.</p>
+      </div>
+      <div class="card">
+        <h3>Notifications</h3>
+        <p>Registrations, approvals, complaint updates and announcements - delivered to your inbox in-app.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="land-section" style="background:#fff;border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
+    <h2>How the campus QR code works</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:start">
+      <ol class="steps">
+        <li>Scan the single permanent CollegeConnect QR code posted around campus.</li>
+        <li>The code always opens the Events page - it never points to one specific event.</li>
+        <li>Browse all approved events with live seat availability.</li>
+        <li>Open an event to check rules, deadline and eligibility.</li>
+        <li>Register and receive your registration ID instantly.</li>
+      </ol>
+      <div>
+        <p>The QR code is generated from the platform's configured address, so it keeps working all year. When the college updates its web address, the code regenerates automatically - posters only need reprinting when that happens.</p>
+        <p><a class="btn btn-secondary" href="/events.html">Preview the events page</a></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="land-section">
+    <h2>Built for every role on campus</h2>
+    <div class="feature-list">
+      <div class="card"><h3>Students</h3><p>Register for events, join clubs, track complaints and build an achievement record.</p></div>
+      <div class="card"><h3>Organizers</h3><p>Propose events, track approvals, and manage registration lists for their own events.</p></div>
+      <div class="card"><h3>Club Coordinators</h3><p>Run recruitment with custom questions, manage members and publish club events.</p></div>
+      <div class="card"><h3>Faculty</h3><p>Review event proposals, verify achievements and resolve student complaints.</p></div>
+      <div class="card"><h3>Administration</h3><p>Publish announcements, manage accounts and export reports across every module.</p></div>
+      <div class="card"><h3>Everyone</h3><p>One login, one calendar, one notice board - consistent on phone and desktop.</p></div>
+    </div>
+  </section>
+
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+</body>
+</html>

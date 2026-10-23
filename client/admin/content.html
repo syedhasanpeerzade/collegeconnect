@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manage Content - CollegeConnect Admin</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <style>
+    .tabs { display: flex; gap: 4px; border-bottom: 2px solid var(--border, #e2e8f0); margin-bottom: 18px; flex-wrap: wrap; }
+    .tab { padding: 10px 18px; cursor: pointer; border: none; background: none; font: inherit; font-weight: 600;
+           color: #64748b; border-bottom: 3px solid transparent; margin-bottom: -2px; }
+    .tab:hover { color: #0f766e; }
+    .tab.active { color: #0f766e; border-bottom-color: #0f766e; }
+    .table-wrap { overflow-x: auto; }
+    table.data { width: 100%; border-collapse: collapse; font-size: 14px; }
+    table.data th, table.data td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border, #e2e8f0); }
+    table.data th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: #64748b; }
+    .badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+    .badge.green { background: #dcfce7; color: #166534; }
+    .badge.gray { background: #f1f5f9; color: #475569; }
+    .badge.red { background: #fee2e2; color: #991b1b; }
+    .badge.blue { background: #dbeafe; color: #1e40af; }
+    .row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .btn-xs { padding: 5px 12px; font-size: 12.5px; border-radius: 7px; }
+    dialog { border: none; border-radius: 14px; padding: 0; max-width: 560px; width: 92vw; }
+    dialog::backdrop { background: rgba(15, 23, 42, .45); }
+    dialog .dlg-body { padding: 22px; }
+    dialog h3 { margin-top: 0; }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+    .muted { color: #64748b; font-size: 12.5px; }
+  </style>
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="container">
+    <div class="admin-layout">
+      <aside class="side-nav">
+        <a href="/admin/index.html">Dashboard</a>
+        <a href="/admin/users.html">Users</a>
+        <a href="/admin/content.html" class="active">Manage Content</a>
+        <a href="/admin/import.html">Bulk Import</a>
+        <a href="/admin/approvals.html">Event Approvals</a>
+        <a href="/admin/achievements.html">Achievements</a>
+        <a href="/admin/qr.html">College QR Code</a>
+        <a href="/admin/reports.html">Reports</a>
+      </aside>
+
+      <main>
+        <div class="page-head">
+          <div><h1>Manage Content</h1><div class="sub">Edit events, post announcements, manage clubs &amp; departments.</div></div>
+        </div>
+        <div id="msg"></div>
+
+        <div class="tabs">
+          <button class="tab active" data-tab="events">Events</button>
+          <button class="tab" data-tab="announcements">Announcements</button>
+          <button class="tab" data-tab="clubs">Clubs</button>
+          <button class="tab" data-tab="departments">Departments</button>
+          <button class="tab" data-tab="coordinators">Coordinators</button>
+        </div>
+
+        <!-- ================= EVENTS ================= -->
+        <section id="tab-events">
+          <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+              <h3 style="margin:0">All events (including unpublished)</h3>
+              <button class="btn btn-xs" id="btn-new-event">+ New Event</button>
+            </div>
+            <div class="table-wrap">
+              <table class="data">
+                <thead><tr><th>Event</th><th>Date</th><th>Organizer</th><th>Regs</th><th>Status</th><th>Actions</th></tr></thead>
+                <tbody id="events-body"><tr><td colspan="6" class="muted">Loading...</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= ANNOUNCEMENTS ================= -->
+        <section id="tab-announcements" hidden>
+          <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+              <h3 style="margin:0">Announcements feed</h3>
+              <button class="btn btn-xs" id="btn-new-ann">+ New Announcement</button>
+            </div>
+            <div class="table-wrap">
+              <table class="data">
+                <thead><tr><th>Title</th><th>Category</th><th>Audience</th><th>Expires</th><th>Actions</th></tr></thead>
+                <tbody id="ann-body"><tr><td colspan="5" class="muted">Loading...</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= CLUBS ================= -->
+        <section id="tab-clubs" hidden>
+          <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+              <h3 style="margin:0">Clubs</h3>
+              <button class="btn btn-xs" id="btn-new-club">+ New Club</button>
+            </div>
+            <div class="table-wrap">
+              <table class="data">
+                <thead><tr><th>Club</th><th>Category</th><th>Recruitment</th><th>Actions</th></tr></thead>
+                <tbody id="clubs-body"><tr><td colspan="4" class="muted">Loading...</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= DEPARTMENTS ================= -->
+        <section id="tab-departments" hidden>
+          <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+              <h3 style="margin:0">Departments</h3>
+              <button class="btn btn-xs" id="btn-new-dept">+ New Department</button>
+            </div>
+            <div class="table-wrap">
+              <table class="data">
+                <thead><tr><th>Code</th><th>Name</th><th>Users</th><th>Events</th><th>Actions</th></tr></thead>
+                <tbody id="dept-body"><tr><td colspan="5" class="muted">Loading...</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= COORDINATORS ================= -->
+        <section id="tab-coordinators" hidden>
+          <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+              <h3 style="margin:0">Club coordinator assignments</h3>
+              <button class="btn btn-xs" id="btn-new-coord">+ Assign Coordinator</button>
+            </div>
+            <div class="table-wrap">
+              <table class="data">
+                <thead><tr><th>Club</th><th>Coordinator</th><th>Email</th><th>Actions</th></tr></thead>
+                <tbody id="coord-body"><tr><td colspan="4" class="muted">Loading...</td></tr></tbody>
+              </table>
+            </div>
+            <p class="muted" style="margin-top:10px">A user must have the CLUB_COORDINATOR role first — assign it from the <a href="/admin/users.html">Users</a> page.</p>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- ============ Event create/edit dialog ============ -->
+  <dialog id="dlg-event">
+    <form class="dlg-body" id="event-form" method="dialog">
+      <h3 id="event-dlg-title">New Event</h3>
+      <div id="event-form-msg"></div>
+      <div class="form-grid">
+        <div class="field"><label>Title *</label><input id="ev-title" required></div>
+        <div class="form-row">
+          <div class="field"><label>Category *</label>
+            <select id="ev-category">
+              <option>TECHNICAL</option><option>CULTURAL</option><option>SPORTS</option>
+              <option>WORKSHOP</option><option>SEMINAR</option><option>COMPETITION</option>
+              <option>FEST</option><option>CLUB_EVENT</option><option>CAREER</option>
+              <option>ARTS</option><option>OTHER</option>
+            </select>
+          </div>
+          <div class="field"><label>Type</label>
+            <select id="ev-type">
+              <option value="COLLEGE_WIDE">College-wide</option>
+              <option value="DEPARTMENT">Department</option>
+              <option value="CLUB">Club</option>
+            </select>
+          </div>
+        </div>
+        <div class="field"><label>Description *</label><textarea id="ev-description" required></textarea></div>
+        <div class="form-row-3">
+          <div class="field"><label>Date *</label><input type="date" id="ev-date" required></div>
+          <div class="field"><label>Start *</label><input type="time" id="ev-start" required value="10:00"></div>
+          <div class="field"><label>End *</label><input type="time" id="ev-end" required value="17:00"></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label>Venue *</label><input id="ev-venue" required></div>
+          <div class="field"><label>Max participants</label><input type="number" id="ev-max" value="100" min="1"></div>
+        </div>
+        <div class="field"><label>Registration deadline</label><input type="date" id="ev-deadline"></div>
+        <div class="field"><label>Poster (image)</label><input type="file" id="ev-poster" accept="image/*"></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" data-close>Cancel</button>
+        <button type="submit" class="btn" id="ev-save">Save Event</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ============ Announcement dialog ============ -->
+  <dialog id="dlg-ann">
+    <form class="dlg-body" id="ann-form" method="dialog">
+      <h3 id="ann-dlg-title">New Announcement</h3>
+      <div id="ann-form-msg"></div>
+      <div class="form-grid">
+        <div class="field"><label>Title *</label><input id="an-title" required></div>
+        <div class="field"><label>Description *</label><textarea id="an-description" required></textarea></div>
+        <div class="form-row">
+          <div class="field"><label>Category</label>
+            <select id="an-category">
+              <option>GENERAL</option><option>EVENT</option><option>CLUB</option>
+              <option>ACADEMIC</option><option>URGENT</option>
+            </select>
+          </div>
+          <div class="field"><label>Audience</label>
+            <select id="an-audience">
+              <option>ALL</option><option>STUDENTS</option><option>FACULTY</option><option>STAFF</option>
+            </select>
+          </div>
+        </div>
+        <div class="field"><label>Expiry date</label><input type="date" id="an-expiry"></div>
+        <div class="field"><label>Attachment</label><input type="file" id="an-file"></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" data-close>Cancel</button>
+        <button type="submit" class="btn" id="an-save">Publish</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ============ Club dialog ============ -->
+  <dialog id="dlg-club">
+    <form class="dlg-body" id="club-form" method="dialog">
+      <h3 id="club-dlg-title">New Club</h3>
+      <div id="club-form-msg"></div>
+      <div class="form-grid">
+        <div class="field"><label>Name *</label><input id="cl-name" required></div>
+        <div class="form-row">
+          <div class="field"><label>Category *</label>
+            <select id="cl-category">
+              <option>TECHNICAL</option><option>CULTURAL</option><option>SPORTS</option>
+              <option>ACADEMIC</option><option>SOCIAL_SERVICE</option><option>OTHER</option>
+            </select>
+          </div>
+          <div class="field"><label>Recruitment</label>
+            <select id="cl-recruitment"><option>OPEN</option><option>CLOSED</option></select>
+          </div>
+        </div>
+        <div class="field"><label>Description *</label><textarea id="cl-description" required></textarea></div>
+        <div class="field"><label>Eligibility</label><input id="cl-eligibility" placeholder="e.g. Open to all students"></div>
+        <div class="field"><label>Logo (image)</label><input type="file" id="cl-logo" accept="image/*"></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" data-close>Cancel</button>
+        <button type="submit" class="btn" id="cl-save">Save Club</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ============ Department dialog ============ -->
+  <dialog id="dlg-dept">
+    <form class="dlg-body" id="dept-form" method="dialog">
+      <h3 id="dept-dlg-title">New Department</h3>
+      <div id="dept-form-msg"></div>
+      <div class="form-grid">
+        <div class="field"><label>Code * <span class="muted">(e.g. CSE)</span></label><input id="dp-code" required maxlength="10" style="text-transform:uppercase"></div>
+        <div class="field"><label>Name *</label><input id="dp-name" required placeholder="e.g. Computer Science & Engineering"></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" data-close>Cancel</button>
+        <button type="submit" class="btn">Save Department</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ============ Assign coordinator dialog ============ -->
+  <dialog id="dlg-coord">
+    <form class="dlg-body" id="coord-form" method="dialog">
+      <h3>Assign Coordinator to Club</h3>
+      <div id="coord-form-msg"></div>
+      <div class="form-grid">
+        <div class="field"><label>User (CLUB_COORDINATOR role) *</label><select id="co-user" required></select></div>
+        <div class="field"><label>Club *</label><select id="co-club" required></select></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" data-close>Cancel</button>
+        <button type="submit" class="btn">Assign</button>
+      </div>
+    </form>
+  </dialog>
+
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      const user = Auth.requireRole(['ADMIN']);
+      if (!user) return;
+      const msg = document.getElementById('msg');
+      const esc = (s) => UI.esc(String(s == null ? '' : s));
+
+      const flash = (m, ok = true) => {
+        msg.innerHTML = `<div class="${ok ? 'ok-box' : 'error-box'}">${esc(m)}</div>`;
+        setTimeout(() => { msg.innerHTML = ''; }, 4000);
+      };
+
+      // ---- Tabs ----
+      document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach((x) => x.classList.remove('active'));
+        t.classList.add('active');
+        ['events', 'announcements', 'clubs', 'departments', 'coordinators'].forEach((n) => {
+          document.getElementById('tab-' + n).hidden = t.dataset.tab !== n;
+        });
+      }));
+
+      // ---- Dialog helpers ----
+      document.querySelectorAll('dialog [data-close]').forEach((b) =>
+        b.addEventListener('click', () => b.closest('dialog').close()));
+      const openDlg = (id) => document.getElementById(id).showModal();
+
+      // ================= EVENTS =================
+      let events = [];
+      async function loadEvents() {
+        try {
+          const res = await API.get('/admin/content/events');
+          events = res.data || [];
+          const tb = document.getElementById('events-body');
+          if (!events.length) {
+            tb.innerHTML = '<tr><td colspan="6" class="muted">No events yet. Create one or approve a request.</td></tr>';
+            return;
+          }
+          tb.innerHTML = events.map((e) => {
+            const st = e.is_published
+              ? '<span class="badge green">Published</span>'
+              : '<span class="badge gray">Hidden</span>';
+            const status = e.status === 'CANCELLED' ? '<span class="badge red">Cancelled</span>'
+              : e.status === 'COMPLETED' ? '<span class="badge blue">Completed</span>' : '';
+            return `<tr>
+              <td><b>${esc(e.title)}</b><br><span class="muted">${esc(e.public_id)} · ${esc(e.category)} · ${esc(e.venue)}</span></td>
+              <td>${esc(UI.fmtDate(e.event_date))}</td>
+              <td>${esc(e.organizer_name || '—')}</td>
+              <td>${e.registration_count}/${e.max_participants}</td>
+              <td>${st} ${status}</td>
+              <td><div class="row-actions">
+                <button class="btn btn-secondary btn-xs" data-edit-ev="${e.id}">Edit</button>
+                <button class="btn btn-secondary btn-xs" data-pub-ev="${e.id}" data-next="${e.is_published ? 0 : 1}">
+                  ${e.is_published ? 'Unpublish' : 'Publish'}</button>
+                ${e.status !== 'CANCELLED' ? `<button class="btn btn-secondary btn-xs" data-cancel-ev="${e.id}">Cancel</button>` : ''}
+                <button class="btn btn-xs" style="background:#b91c1c" data-del-ev="${e.id}">Delete</button>
+              </div></td></tr>`;
+          }).join('');
+        } catch (err) { flash(err.message, false); }
+      }
+
+      let editEvId = null;
+      document.getElementById('btn-new-event').addEventListener('click', () => {
+        editEvId = null;
+        document.getElementById('event-dlg-title').textContent = 'New Event';
+        document.getElementById('event-form').reset();
+        openDlg('dlg-event');
+      });
+      document.getElementById('events-body').addEventListener('click', async (e) => {
+        const editBtn = e.target.closest('[data-edit-ev]');
+        if (editBtn) {
+          const ev = events.find((x) => String(x.id) === editBtn.dataset.editEv);
+          if (!ev) return;
+          try {
+            const full = await API.get('/events/' + ev.id);
+            const d = full.data;
+            editEvId = ev.id;
+            document.getElementById('event-dlg-title').textContent = 'Edit Event — ' + ev.title;
+            document.getElementById('ev-title').value = d.title || '';
+            document.getElementById('ev-category').value = d.category || 'OTHER';
+            document.getElementById('ev-type').value = d.event_type || 'COLLEGE_WIDE';
+            document.getElementById('ev-description').value = d.description || '';
+            document.getElementById('ev-date').value = (d.event_date || '').slice(0, 10);
+            document.getElementById('ev-start').value = (d.start_time || '').slice(0, 5);
+            document.getElementById('ev-end').value = (d.end_time || '').slice(0, 5);
+            document.getElementById('ev-venue').value = d.venue || '';
+            document.getElementById('ev-max').value = d.max_participants || 100;
+            document.getElementById('ev-deadline').value = (d.registration_deadline || '').slice(0, 10);
+            openDlg('dlg-event');
+          } catch (err) { flash(err.message, false); }
+          return;
+        }
+        const pubBtn = e.target.closest('[data-pub-ev]');
+        if (pubBtn) {
+          try {
+            const res = await API.put('/admin/content/events/' + pubBtn.dataset.pubEv + '/publish',
+              { is_published: pubBtn.dataset.next === '1' });
+            flash(res.message); loadEvents();
+          } catch (err) { flash(err.message, false); }
+          return;
+        }
+        const cancelBtn = e.target.closest('[data-cancel-ev]');
+        if (cancelBtn) {
+          if (!(await UI.confirm('Cancel this event? Registered students will be notified.', { confirmText: 'Cancel event' }))) return;
+          try {
+            await API.patch('/events/' + cancelBtn.dataset.cancelEv + '/status', { status: 'CANCELLED' });
+            flash('Event cancelled'); loadEvents();
+          } catch (err) { flash(err.message, false); }
+          return;
+        }
+        const delBtn = e.target.closest('[data-del-ev]');
+        if (delBtn) {
+          if (!(await UI.confirm('Permanently delete this event and its registrations?', { confirmText: 'Delete forever' }))) return;
+          try {
+            await API.del('/events/' + delBtn.dataset.delEv);
+            flash('Event deleted'); loadEvents();
+          } catch (err) { flash(err.message, false); }
+        }
+      });
+      document.getElementById('event-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const box = document.getElementById('event-form-msg');
+        const fd = new FormData();
+        fd.append('title', document.getElementById('ev-title').value.trim());
+        fd.append('category', document.getElementById('ev-category').value);
+        fd.append('event_type', document.getElementById('ev-type').value);
+        fd.append('description', document.getElementById('ev-description').value.trim());
+        fd.append('event_date', document.getElementById('ev-date').value);
+        fd.append('start_time', document.getElementById('ev-start').value);
+        fd.append('end_time', document.getElementById('ev-end').value);
+        fd.append('venue', document.getElementById('ev-venue').value.trim());
+        fd.append('max_participants', document.getElementById('ev-max').value);
+        fd.append('registration_deadline', document.getElementById('ev-deadline').value || '');
+        const poster = document.getElementById('ev-poster').files[0];
+        if (poster) fd.append('poster', poster);
+        const saveBtn = document.getElementById('ev-save');
+        saveBtn.disabled = true;
+        try {
+          const res = editEvId
+            ? await API.putForm('/events/' + editEvId, fd)
+            : await API.postForm('/events', fd);
+          document.getElementById('dlg-event').close();
+          flash(res.message || 'Saved');
+          loadEvents();
+        } catch (err) {
+          box.innerHTML = `<div class="error-box">${esc(err.message)}</div>`;
+        } finally { saveBtn.disabled = false; }
+      });
+
+      // ================= ANNOUNCEMENTS =================
+      let anns = [], editAnnId = null;
+      async function loadAnns() {
+        try {
+          const res = await API.get('/announcements?limit=200');
+          anns = res.data.announcements || res.data || [];
+          const tb = document.getElementById('ann-body');
+          if (!anns.length) { tb.innerHTML = '<tr><td colspan="5" class="muted">No announcements yet.</td></tr>'; return; }
+          tb.innerHTML = anns.map((a) => `<tr>
+            <td><b>${esc(a.title)}</b><br><span class="muted">${esc(a.description).slice(0, 90)}${a.description && a.description.length > 90 ? '…' : ''}</span></td>
+            <td><span class="badge ${a.category === 'URGENT' ? 'red' : 'blue'}">${esc(a.category)}</span></td>
+            <td>${esc(a.audience)}</td>
+            <td>${a.expiry_date ? esc(UI.fmtDate(a.expiry_date)) : '—'}</td>
+            <td><div class="row-actions">
+              <button class="btn btn-secondary btn-xs" data-edit-ann="${a.id}">Edit</button>
+              <button class="btn btn-xs" style="background:#b91c1c" data-del-ann="${a.id}">Delete</button>
+            </div></td></tr>`).join('');
+        } catch (err) { flash(err.message, false); }
+      }
+      document.getElementById('btn-new-ann').addEventListener('click', () => {
+        editAnnId = null;
+        document.getElementById('ann-dlg-title').textContent = 'New Announcement';
+        document.getElementById('ann-form').reset();
+        openDlg('dlg-ann');
+      });
+      document.getElementById('ann-body').addEventListener('click', async (e) => {
+        const editBtn = e.target.closest('[data-edit-ann]');
+        if (editBtn) {
+          const a = anns.find((x) => String(x.id) === editBtn.dataset.editAnn);
+          if (!a) return;
+          editAnnId = a.id;
+          document.getElementById('ann-dlg-title').textContent = 'Edit Announcement';
+          document.getElementById('an-title').value = a.title || '';
+          document.getElementById('an-description').value = a.description || '';
+          document.getElementById('an-category').value = a.category || 'GENERAL';
+          document.getElementById('an-audience').value = a.audience || 'ALL';
+          document.getElementById('an-expiry').value = (a.expiry_date || '').slice(0, 10);
+          openDlg('dlg-ann');
+          return;
+        }
+        const delBtn = e.target.closest('[data-del-ann]');
+        if (delBtn && (await UI.confirm('Delete this announcement?', { confirmText: 'Delete' }))) {
+          API.del('/announcements/' + delBtn.dataset.delAnn)
+            .then((r) => { flash(r.message); loadAnns(); })
+            .catch((err) => flash(err.message, false));
+        }
+      });
+      document.getElementById('ann-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const box = document.getElementById('ann-form-msg');
+        const fd = new FormData();
+        fd.append('title', document.getElementById('an-title').value.trim());
+        fd.append('description', document.getElementById('an-description').value.trim());
+        fd.append('category', document.getElementById('an-category').value);
+        fd.append('audience', document.getElementById('an-audience').value);
+        fd.append('expiry_date', document.getElementById('an-expiry').value || '');
+        const f = document.getElementById('an-file').files[0];
+        if (f) fd.append('announcement_file', f);
+        const saveBtn = document.getElementById('an-save');
+        saveBtn.disabled = true;
+        try {
+          const res = editAnnId
+            ? await API.putForm('/announcements/' + editAnnId, fd)
+            : await API.postForm('/announcements', fd);
+          document.getElementById('dlg-ann').close();
+          flash(res.message || 'Published');
+          loadAnns();
+        } catch (err) {
+          box.innerHTML = `<div class="error-box">${esc(err.message)}</div>`;
+        } finally { saveBtn.disabled = false; }
+      });
+
+      // ================= CLUBS =================
+      let clubs = [], editClubId = null;
+      async function loadClubs() {
+        try {
+          const res = await API.get('/clubs');
+          clubs = res.data.clubs || res.data || [];
+          const tb = document.getElementById('clubs-body');
+          if (!clubs.length) { tb.innerHTML = '<tr><td colspan="4" class="muted">No clubs yet.</td></tr>'; return; }
+          tb.innerHTML = clubs.map((c) => `<tr>
+            <td><b>${esc(c.name)}</b></td>
+            <td>${esc(c.category)}</td>
+            <td><span class="badge ${c.recruitment_status === 'OPEN' ? 'green' : 'gray'}">${esc(c.recruitment_status)}</span></td>
+            <td><div class="row-actions">
+              <button class="btn btn-secondary btn-xs" data-edit-club="${c.id}">Edit</button>
+              <button class="btn btn-xs" style="background:#b91c1c" data-del-club="${c.id}">Delete</button>
+            </div></td></tr>`).join('');
+        } catch (err) { flash(err.message, false); }
+      }
+      document.getElementById('btn-new-club').addEventListener('click', () => {
+        editClubId = null;
+        document.getElementById('club-dlg-title').textContent = 'New Club';
+        document.getElementById('club-form').reset();
+        document.getElementById('cl-recruitment').value = 'OPEN';
+        openDlg('dlg-club');
+      });
+      document.getElementById('clubs-body').addEventListener('click', async (e) => {
+        const editBtn = e.target.closest('[data-edit-club]');
+        if (editBtn) {
+          const c = clubs.find((x) => String(x.id) === editBtn.dataset.editClub);
+          if (!c) return;
+          editClubId = c.id;
+          document.getElementById('club-dlg-title').textContent = 'Edit Club — ' + c.name;
+          document.getElementById('cl-name').value = c.name || '';
+          document.getElementById('cl-category').value = c.category || 'OTHER';
+          document.getElementById('cl-recruitment').value = c.recruitment_status || 'OPEN';
+          document.getElementById('cl-description').value = c.description || '';
+          document.getElementById('cl-eligibility').value = c.eligibility || '';
+          openDlg('dlg-club');
+          return;
+        }
+        const delBtn = e.target.closest('[data-del-club]');
+        if (delBtn && (await UI.confirm('Delete this club? Its members and applications will be removed too.', { confirmText: 'Delete club' }))) {
+          API.del('/admin/content/clubs/' + delBtn.dataset.delClub)
+            .then((r) => { flash(r.message); loadClubs(); })
+            .catch((err) => flash(err.message, false));
+        }
+      });
+      document.getElementById('club-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const box = document.getElementById('club-form-msg');
+        const fd = new FormData();
+        fd.append('name', document.getElementById('cl-name').value.trim());
+        fd.append('category', document.getElementById('cl-category').value);
+        fd.append('recruitment_status', document.getElementById('cl-recruitment').value);
+        fd.append('description', document.getElementById('cl-description').value.trim());
+        fd.append('eligibility', document.getElementById('cl-eligibility').value.trim());
+        const f = document.getElementById('cl-logo').files[0];
+        if (f) fd.append('logo', f);
+        const saveBtn = document.getElementById('cl-save');
+        saveBtn.disabled = true;
+        try {
+          const res = editClubId
+            ? await API.putForm('/admin/content/clubs/' + editClubId, fd)
+            : await API.postForm('/admin/content/clubs', fd);
+          document.getElementById('dlg-club').close();
+          flash(res.message || 'Saved');
+          loadClubs();
+        } catch (err) {
+          box.innerHTML = `<div class="error-box">${esc(err.message)}</div>`;
+        } finally { saveBtn.disabled = false; }
+      });
+
+      // ================= DEPARTMENTS =================
+      let depts = [], editDeptId = null;
+      async function loadDepts() {
+        try {
+          const res = await API.get('/admin/content/departments-managed');
+          depts = res.data || [];
+          const tb = document.getElementById('dept-body');
+          tb.innerHTML = depts.map((d) => `<tr>
+            <td><b>${esc(d.code)}</b></td>
+            <td>${esc(d.name)}</td>
+            <td>${d.users_count}</td>
+            <td>${d.events_count}</td>
+            <td><div class="row-actions">
+              <button class="btn btn-secondary btn-xs" data-edit-dept="${d.id}">Edit</button>
+              <button class="btn btn-xs" style="background:#b91c1c" data-del-dept="${d.id}">Delete</button>
+            </div></td></tr>`).join('');
+        } catch (err) { flash(err.message, false); }
+      }
+      document.getElementById('btn-new-dept').addEventListener('click', () => {
+        editDeptId = null;
+        document.getElementById('dept-dlg-title').textContent = 'New Department';
+        document.getElementById('dept-form').reset();
+        openDlg('dlg-dept');
+      });
+      document.getElementById('dept-body').addEventListener('click', async (e) => {
+        const editBtn = e.target.closest('[data-edit-dept]');
+        if (editBtn) {
+          const d = depts.find((x) => String(x.id) === editBtn.dataset.editDept);
+          if (!d) return;
+          editDeptId = d.id;
+          document.getElementById('dept-dlg-title').textContent = 'Edit Department';
+          document.getElementById('dp-code').value = d.code || '';
+          document.getElementById('dp-name').value = d.name || '';
+          openDlg('dlg-dept');
+          return;
+        }
+        const delBtn = e.target.closest('[data-del-dept]');
+        if (delBtn && (await UI.confirm('Delete this department? Users referencing it will keep their accounts.', { confirmText: 'Delete' }))) {
+          API.del('/admin/content/departments/' + delBtn.dataset.delDept)
+            .then((r) => { flash(r.message); loadDepts(); })
+            .catch((err) => flash(err.message, false));
+        }
+      });
+      document.getElementById('dept-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const box = document.getElementById('dept-form-msg');
+        const payload = {
+          code: document.getElementById('dp-code').value.trim().toUpperCase(),
+          name: document.getElementById('dp-name').value.trim(),
+        };
+        try {
+          const res = editDeptId
+            ? await API.put('/admin/content/departments/' + editDeptId, payload)
+            : await API.post('/admin/content/departments', payload);
+          document.getElementById('dlg-dept').close();
+          flash(res.message || 'Saved');
+          loadDepts();
+        } catch (err) {
+          box.innerHTML = `<div class="error-box">${esc(err.message)}</div>`;
+        }
+      });
+
+      // ================= COORDINATORS =================
+      let coords = [];
+      async function loadCoords() {
+        try {
+          const [coordRes, usersRes, clubsRes] = await Promise.all([
+            API.get('/admin/content/coordinators'),
+            API.get('/admin/users?role=CLUB_COORDINATOR'),
+            API.get('/clubs'),
+          ]);
+          coords = coordRes.data || [];
+          const coordinatorUsers = (usersRes.data.users || usersRes.data || []).filter((u) => u.role === 'CLUB_COORDINATOR');
+          const allClubs = clubsRes.data.clubs || clubsRes.data || [];
+          document.getElementById('co-user').innerHTML = coordinatorUsers.length
+            ? coordinatorUsers.map((u) => `<option value="${u.id}">${esc(u.full_name)} (${esc(u.email)})</option>`).join('')
+            : '<option value="">No users with CLUB_COORDINATOR role</option>';
+          document.getElementById('co-club').innerHTML = allClubs.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+          const tb = document.getElementById('coord-body');
+          if (!coords.length) { tb.innerHTML = '<tr><td colspan="4" class="muted">No coordinators assigned yet.</td></tr>'; return; }
+          tb.innerHTML = coords.map((c) => `<tr>
+            <td>${esc(c.club_name)}</td>
+            <td><b>${esc(c.full_name)}</b></td>
+            <td>${esc(c.email)}</td>
+            <td><button class="btn btn-xs" style="background:#b91c1c" data-del-coord="${c.id}">Remove</button></td>
+          </tr>`).join('');
+        } catch (err) { flash(err.message, false); }
+      }
+      document.getElementById('btn-new-coord').addEventListener('click', () => openDlg('dlg-coord'));
+      document.getElementById('coord-body').addEventListener('click', async (e) => {
+        const delBtn = e.target.closest('[data-del-coord]');
+        if (delBtn && (await UI.confirm('Remove this coordinator from the club?', { confirmText: 'Remove' }))) {
+          API.del('/admin/content/coordinators/' + delBtn.dataset.delCoord)
+            .then((r) => { flash(r.message); loadCoords(); })
+            .catch((err) => flash(err.message, false));
+        }
+      });
+      document.getElementById('coord-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const box = document.getElementById('coord-form-msg');
+        try {
+          const res = await API.post('/admin/content/coordinators', {
+            user_id: document.getElementById('co-user').value,
+            club_id: document.getElementById('co-club').value,
+          });
+          document.getElementById('dlg-coord').close();
+          flash(res.message || 'Assigned');
+          loadCoords();
+        } catch (err) {
+          box.innerHTML = `<div class="error-box">${esc(err.message)}</div>`;
+        }
+      });
+
+      // ---- Initial load ----
+      loadEvents(); loadAnns(); loadClubs(); loadDepts(); loadCoords();
+    })();
+  </script>
+</body>
+</html>

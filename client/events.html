@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Events - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="container">
+    <div class="page-head">
+      <div>
+        <h1 id="page-title">Campus Events</h1>
+        <div class="sub" id="page-sub">Pick a category to discover what's coming up on campus.</div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <a class="btn btn-secondary" href="/my-registrations.html">My Registrations</a>
+        <a class="btn" href="/event-request.html">Organize an Event</a>
+      </div>
+    </div>
+
+    <!-- ================= Categories landing ================= -->
+    <section id="cat-view">
+      <p style="margin:0 0 14px;font-size:14px"><a href="/events.html?all=1">Browse all events</a> if you prefer one list of everything,
+        or <a href="/events.html?archive=1#archive">browse the archive of past and historical events</a>.</p>
+      <div class="cat-grid" id="cat-grid">
+        <div class="loading">Loading categories...</div>
+      </div>
+    </section>
+
+    <!-- ================= Filtered event list ================= -->
+    <section id="list-view" style="display:none">
+      <a class="cat-back" href="/events.html">&#8592; Back to Categories</a>
+
+      <div class="filter-bar">
+        <input type="search" class="search" id="f-search" placeholder="Search events by name...">
+        <div class="pill-row" id="pill-row" role="tablist" aria-label="Event filters">
+          <button class="pill" data-f="all">All</button>
+          <button class="pill" data-f="upcoming">Upcoming</button>
+          <button class="pill" data-f="week">This Week</button>
+          <button class="pill" data-f="registered">Registered</button>
+        </div>
+        <button class="btn btn-sm" id="f-apply">Search</button>
+      </div>
+
+      <div class="list-head" id="list-head"></div>
+      <div id="events-grid" class="grid grid-3"></div>
+    </section>
+
+    <!-- ================= Past / historical archive ================= -->
+    <section id="archive-view" style="display:none">
+      <div id="archive"></div>
+      <a class="cat-back" href="/events.html">&#8592; Back to Categories</a>
+      <div class="page-head" style="margin:6px 0 14px">
+        <div>
+          <h2 style="margin:0">Past &amp; historical events</h2>
+          <div class="sub">Events that have already taken place, including records imported from the college archive.</div>
+        </div>
+      </div>
+      <div class="list-head" id="archive-head"></div>
+      <div id="archive-grid" class="grid grid-3"></div>
+    </section>
+  </div>
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    /* Category group metadata (kept in sync with server EVENT_CATEGORY_GROUPS) */
+    window.CC_EVENT_GROUPS = [
+      { key: 'SPORTS', label: 'Sports', description: 'Tournaments, matches and fitness sessions on the field and in the arena.' },
+      { key: 'TECH', label: 'Coding & Tech', description: 'Hackathons, coding competitions, tech workshops and AI/ML events.' },
+      { key: 'CLUB_EVENT', label: 'College Clubs', description: 'Club meetups, sessions and activities hosted by student organizations.' },
+      { key: 'CULTURAL', label: 'Cultural Events', description: 'Fests, performances and celebrations of music, dance and drama.' },
+      { key: 'ACADEMIC', label: 'Academic Events', description: 'Seminars, guest lectures and symposiums to sharpen your academics.' },
+      { key: 'CAREER', label: 'Career & Placement', description: 'Placement drives, internships, resume clinics and career talks.' },
+      { key: 'ARTS', label: 'Arts & Creativity', description: 'Exhibitions, open mics, photography and hands-on creative sessions.' },
+      { key: 'OTHER', label: 'Other Events', description: 'Everything else happening around campus that fits no single box.' },
+    ];
+  </script>
+  <script>
+    'use strict';
+    (function () {
+      const catView = document.getElementById('cat-view');
+      const listView = document.getElementById('list-view');
+      const catGrid = document.getElementById('cat-grid');
+      const grid = document.getElementById('events-grid');
+      const pillRow = document.getElementById('pill-row');
+      const searchInput = document.getElementById('f-search');
+      const listHead = document.getElementById('list-head');
+
+      const params = new URLSearchParams(location.search);
+      const categoryParam = params.get('category') || '';
+      const browseAll = params.get('all') === '1';
+      let currentFilter = 'all';   // all | upcoming | week | registered
+      let allEvents = [];          // fetched list for the active category/search
+      let myEventIds = null;       // Set of event ids I am registered for (lazy)
+
+      /* ---------------- Categories landing ---------------- */
+      async function loadCategories() {
+        catView.style.display = '';
+        listView.style.display = 'none';
+        document.getElementById('page-title').textContent = 'Campus Events';
+        document.getElementById('page-sub').textContent = 'Pick a category to discover what\u2019s coming up on campus.';
+        try {
+          const res = await API.get('/events/categories');
+          const cats = res.data || [];
+          if (!cats.length) {
+            catGrid.innerHTML = UI.empty('No categories available', 'Check back soon.');
+            return;
+          }
+          catGrid.innerHTML = cats.map((c) => `
+            <a class="cat-card" href="/events.html?category=${encodeURIComponent(c.key)}" aria-label="${UI.esc(c.label)} events">
+              <span class="cat-icon">${c.icon}</span>
+              <span class="cat-info">
+                <span class="cat-name">${UI.esc(c.label)}</span>
+                <span class="cat-desc">${UI.esc(c.description)}</span>
+                <span class="cat-count">${c.upcoming_count > 0
+                  ? `<b>${c.upcoming_count}</b> upcoming event${c.upcoming_count === 1 ? '' : 's'}`
+                  : 'New events coming soon'}</span>
+              </span>
+              <span class="cat-arrow">&#8594;</span>
+            </a>`).join('');
+        } catch (err) {
+          catGrid.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        }
+      }
+
+      /* ---------------- Filtered list ---------------- */
+      function groupMeta(key) {
+        return (window.CC_EVENT_GROUPS || []).find((g) => g.key === key.toUpperCase()) || null;
+      }
+
+      function categoryHeading() {
+        if (!categoryParam) return { title: 'All Events', sub: 'Everything upcoming, across every category.' };
+        const g = groupMeta(categoryParam);
+        if (g) return { title: g.label, sub: g.description };
+        return { title: UI.categoryLabel(categoryParam), sub: `Events in the ${UI.categoryLabel(categoryParam)} category.` };
+      }
+
+      function setPill(f) {
+        currentFilter = f;
+        pillRow.querySelectorAll('.pill').forEach((p) => p.classList.toggle('active', p.dataset.f === f));
+      }
+
+      function applyClientFilter(list) {
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const weekEnd = new Date(today); weekEnd.setDate(weekEnd.getDate() + 7);
+        if (currentFilter === 'upcoming') {
+          return list.filter((e) => new Date(`${e.event_date}T23:59:59`) >= new Date());
+        }
+        if (currentFilter === 'week') {
+          return list.filter((e) => {
+            const d = new Date(`${e.event_date}T00:00:00`);
+            return d >= today && d < weekEnd;
+          });
+        }
+        if (currentFilter === 'registered') {
+          return myEventIds ? list.filter((e) => myEventIds.has(e.id)) : [];
+        }
+        return list;
+      }
+
+      function renderList() {
+        const shown = applyClientFilter(allEvents);
+        const head = categoryHeading();
+        const filterLabel = { all: 'All', upcoming: 'Upcoming', week: 'This Week', registered: 'Registered' }[currentFilter];
+        listHead.innerHTML = `<span class="count-pill">${shown.length} event${shown.length === 1 ? '' : 's'}</span>
+          <span class="lh-label">${UI.esc(head.title)} &middot; ${filterLabel}</span>`;
+        if (!shown.length) {
+          if (currentFilter === 'registered' && !Auth.user()) {
+            grid.innerHTML = UI.empty('Log in to see your registrations',
+              `<a href="/login.html?next=${encodeURIComponent(location.pathname + location.search)}">Login</a> to view the events you are registered for.`);
+          } else if (currentFilter === 'registered') {
+            grid.innerHTML = UI.empty('No registrations yet', 'Browse a category and register for an upcoming event.');
+          } else {
+            grid.innerHTML = UI.empty('No events found', 'Try a different filter or clear the search.');
+          }
+          return;
+        }
+        grid.innerHTML = shown.map((e) => UI.eventCard(e, { registered: myEventIds && myEventIds.has(e.id) })).join('');
+        UI.bindRegisterButtons(grid, (id) => {
+          const eid = Number(id);
+          if (myEventIds) myEventIds.add(eid);
+          const ev = allEvents.find((x) => x.id === eid);
+          if (ev) ev.registration_count = (ev.registration_count || 0) + 1;
+          renderList(); // re-render so seats count + Registered state stay accurate
+        });
+      }
+
+      async function loadMyRegistrations() {
+        if (!Auth.user()) return null;
+        try {
+          const res = await API.get('/events/my-registrations');
+          const rows = res.data || [];
+          return new Set(rows.filter((r) => r.status === 'REGISTERED').map((r) => r.event_id));
+        } catch (_e) {
+          return new Set();
+        }
+      }
+
+      async function loadList() {
+        catView.style.display = 'none';
+        listView.style.display = '';
+        const head = categoryHeading();
+        document.getElementById('page-title').textContent = head.title;
+        document.getElementById('page-sub').textContent = head.sub;
+
+        grid.innerHTML = UI.loadingBox('Loading events...');
+        try {
+          const p = new URLSearchParams();
+          if (categoryParam) p.set('category', categoryParam);
+          const s = searchInput.value.trim();
+          if (s) p.set('search', s);
+          p.set('limit', '200');
+          const res = await API.get(`/events?${p.toString()}`);
+          allEvents = (res.data.events || res.data) || [];
+          myEventIds = await loadMyRegistrations();
+          renderList();
+        } catch (err) {
+          grid.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        }
+      }
+
+      /* ---------------- Past / historical archive ----------------
+         Imported historical records land here: they are never shown in the
+         upcoming list, and they carry an explicit HISTORICAL RECORD marker so
+         they cannot be mistaken for something a student organised. */
+      const archiveView = document.getElementById('archive-view');
+      const archiveGrid = document.getElementById('archive-grid');
+
+      function archiveCard(e) {
+        const official = Number(e.is_official) === 1;
+        const historical = Number(e.is_historical) === 1;
+        const poster = e.poster_path ? `style="background-image:url('${UI.esc(e.poster_path)}')"` : '';
+        const posterText = e.poster_path ? '' : UI.esc(UI.categoryLabel(e.category));
+        return `
+          <div class="card event-card${official ? ' is-official' : ''}">
+            <div class="ec-poster" ${poster}>${posterText}
+              ${historical
+                ? '<span class="ev-ribbon official">&#128220; HISTORICAL RECORD</span>'
+                : (official ? '<span class="ev-ribbon official">&#10003; OFFICIAL EVENT</span>'
+                           : '<span class="ev-ribbon student">STUDENT EVENT</span>')}
+            </div>
+            <div class="ec-body">
+              <a class="ec-title" href="/event-details.html?id=${e.id}">${UI.esc(e.title)}</a>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">${UI.statusBadge(e.category)}${e.status ? UI.statusBadge(e.status) : ''}</div>
+              <div class="ec-meta">
+                <span>${UI.fmtDate(e.event_date)}${e.start_time ? ` \u00b7 ${UI.fmtTime(e.start_time)}` : ''}</span>
+                <span>${UI.esc(e.venue || '')}</span>
+                ${e.organizer_name ? `<span>by ${UI.esc(e.organizer_name)}</span>` : ''}
+              </div>
+              <div class="ec-foot">
+                ${e.academic_year ? `<span class="seats">Academic year ${UI.esc(e.academic_year)}</span>` : '<span></span>'}
+                ${e.source_url ? `<a class="btn btn-sm btn-secondary" href="${UI.esc(e.source_url)}" target="_blank" rel="noopener">Source</a>` : ''}
+              </div>
+            </div>
+          </div>`;
+      }
+
+      async function loadArchive() {
+        catView.style.display = 'none';
+        listView.style.display = 'none';
+        archiveView.style.display = '';
+        document.getElementById('page-title').textContent = 'Past & Historical Events';
+        document.getElementById('page-sub').textContent = 'The campus events archive.';
+        archiveGrid.innerHTML = UI.loadingBox('Loading archive...');
+        document.getElementById('archive-head').innerHTML = '';
+        try {
+          const res = await API.get('/events/past?limit=200');
+          const rows = (res.data.events || res.data) || [];
+          const historical = rows.filter((e) => Number(e.is_historical) === 1).length;
+          document.getElementById('archive-head').innerHTML =
+            `<span class="count-pill">${rows.length} event${rows.length === 1 ? '' : 's'}</span>` +
+            `<span class="lh-label">Archive${historical ? ` &middot; ${historical} imported historical record${historical === 1 ? '' : 's'}` : ''}</span>`;
+          archiveGrid.innerHTML = rows.length
+            ? rows.map(archiveCard).join('')
+            : UI.empty('The archive is empty', 'Past events and records imported from the college archive will appear here.');
+        } catch (err) {
+          archiveGrid.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        }
+      }
+
+      /* ---------------- Events wiring ---------------- */
+      const wantsArchive = params.get('archive') === '1' || location.hash === '#archive';
+      if (wantsArchive) {
+        loadArchive();
+      } else if (categoryParam || browseAll) {
+        setPill('all');
+        loadList();
+      } else {
+        loadCategories();
+      }
+
+      pillRow.addEventListener('click', (e) => {
+        const btn = e.target.closest('.pill');
+        if (!btn) return;
+        setPill(btn.dataset.f);
+        renderList();
+      });
+
+      document.getElementById('f-apply').addEventListener('click', loadList);
+      searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') loadList(); });
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Event Request Approvals - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="container">
+    <div class="page-head">
+      <div><h1>Event Approval Requests</h1><div class="sub">Applications from students awaiting HOD review. Only approved applications unlock event publishing.</div></div>
+      <select id="status-filter">
+        <option value="">All statuses</option>
+        <option>PENDING</option><option>UNDER_REVIEW</option><option>APPROVED</option>
+        <option>REJECTED</option><option>CHANGES_REQUESTED</option>
+      </select>
+    </div>
+    <div id="hod-stats" class="grid grid-3" style="margin-bottom:18px"></div>
+    <div id="content"><div class="loading">Loading...</div></div>
+  </div>
+
+  <div class="modal-overlay" id="detail-modal" style="display:none">
+    <div class="modal" style="max-width:640px;max-height:88vh;overflow:auto">
+      <div id="detail-body"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="close-detail">Close</button>
+        <span id="action-area" style="display:flex;gap:8px"></span>
+      </div>
+    </div>
+  </div>
+
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      const user = Auth.requireRole(['FACULTY', 'ADMIN']);
+      if (!user) return;
+      const box = document.getElementById('content');
+      const modal = document.getElementById('detail-modal');
+      const detailBody = document.getElementById('detail-body');
+      const actionArea = document.getElementById('action-area');
+      let currentRequestId = null;
+
+      document.getElementById('close-detail').addEventListener('click', () => { modal.style.display = 'none'; });
+      modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
+
+      async function act(decision) {
+        let remarks = '';
+        if (decision === 'reject') {
+          remarks = await UI.prompt('Students see this reason. A rejection reason is required.', {
+            title: '&#10060; Reject request', placeholder: 'e.g. Venue already booked for that slot',
+            multiline: true, confirmText: 'Reject request',
+          });
+          if (remarks === null) return;
+        } else if (decision === 'changes') {
+          remarks = await UI.prompt('Describe what the applicant should change before resubmitting.', {
+            title: 'Request changes', placeholder: 'e.g. Add expected budget and faculty coordinator',
+            multiline: true, confirmText: 'Send change request',
+          });
+          if (remarks === null) return;
+        } else {
+          remarks = (await UI.prompt('Optional remarks for the applicant (approval note).', {
+            title: '&#9989; Approve event', required: false, multiline: true, confirmText: 'Approve event',
+          })) || '';
+        }
+        try {
+          const res = await API.put(`/events/requests/${currentRequestId}/${decision}`, { remarks });
+          UI.toast(res.message, 'success');
+          modal.style.display = 'none';
+          load();
+        } catch (err) { UI.toast(err.message, 'error'); }
+      }
+
+      async function load() {
+        box.innerHTML = UI.loadingBox('Loading requests...');
+        // HOD approval history: Pending | Approved | Rejected
+        try {
+          const st = await API.get('/admin/dashboard/faculty');
+          const d = st.data;
+          document.getElementById('hod-stats').innerHTML = `
+            <div class="card stat-card"><span class="stat-label">&#128993; Pending</span><span class="stat-value">${d.pending_event_requests}</span></div>
+            <div class="card stat-card"><span class="stat-label">&#128994; Approved</span><span class="stat-value">${d.approved_requests}</span></div>
+            <div class="card stat-card"><span class="stat-label">&#128308; Rejected</span><span class="stat-value">${d.rejected_requests}</span></div>`;
+        } catch (_e) { document.getElementById('hod-stats').innerHTML = ''; }
+        try {
+          const status = document.getElementById('status-filter').value;
+          const res = await API.get(`/events/requests${status ? `?status=${status}` : ''}`);
+          const rows = res.data || [];
+          if (!rows.length) { box.innerHTML = UI.empty('No event requests'); return; }
+
+          box.innerHTML = `<div class="table-wrap"><table>
+            <thead><tr><th>Organizer</th><th>Event</th><th>Category</th><th>Proposed date</th><th>Venue</th><th>Expected</th><th>Submitted</th><th>Status</th><th></th></tr></thead>
+            <tbody>${rows.map((r) => `
+              <tr>
+                <td data-label="Organizer">${UI.esc(r.requester_name || '-')}<br><span style="font-size:12px;color:var(--muted)">${UI.esc(r.requester_student_id || '')}</span></td>
+                <td data-label="Event"><b>${UI.esc(r.title)}</b></td>
+                <td data-label="Category">${UI.categoryLabel(r.category)}</td>
+                <td data-label="Date">${UI.fmtDate(r.proposed_date)}</td>
+                <td data-label="Venue">${UI.esc(r.venue)}</td>
+                <td data-label="Expected">${r.expected_participants}</td>
+                <td data-label="Submitted">${UI.fmtDate(r.created_at)}</td>
+                <td data-label="Status">${UI.statusBadge(r.status)}</td>
+                <td data-label=""><button class="btn btn-sm btn-secondary" data-open="${r.id}">Review</button></td>
+              </tr>`).join('')}</tbody>
+          </table></div>`;
+
+          box.querySelectorAll('[data-open]').forEach((b) => {
+            b.addEventListener('click', async () => {
+              currentRequestId = b.dataset.open;
+              try {
+                const res = await API.get(`/events/requests/${currentRequestId}`);
+                const r = res.data;
+                detailBody.innerHTML = `
+                  <h3 style="margin-top:0">${UI.esc(r.title)} ${UI.statusBadge(r.status)}</h3>
+                  <dl class="kv">
+                    <dt>Request ID</dt><dd class="mono">${UI.esc(r.public_id)}</dd>
+                    <dt>Requested by</dt><dd>${UI.esc(r.requester_name || '-')} (${UI.esc(r.requester_email || '-')})</dd>
+                    <dt>Category</dt><dd>${UI.categoryLabel(r.category)} (${UI.categoryLabel(r.event_type)})</dd>
+                    <dt>Schedule</dt><dd>${UI.fmtDate(r.proposed_date)}, ${UI.fmtTime(r.start_time)} - ${UI.fmtTime(r.end_time)}</dd>
+                    <dt>Venue</dt><dd>${UI.esc(r.venue)}</dd>
+                    <dt>Expected</dt><dd>${r.expected_participants} participants</dd>
+                    ${r.estimated_budget ? `<dt>Budget</dt><dd>INR ${Number(r.estimated_budget).toLocaleString('en-IN')}</dd>` : ''}
+                    ${r.required_facilities ? `<dt>Facilities</dt><dd>${UI.esc(r.required_facilities)}</dd>` : ''}
+                    ${r.faculty_name ? `<dt>Faculty coord.</dt><dd>${UI.esc(r.faculty_name)}</dd>` : ''}
+                    ${r.eligibility ? `<dt>Eligibility</dt><dd>${UI.esc(r.eligibility)}</dd>` : ''}
+                    ${r.poster_path ? `<dt>Poster</dt><dd><a href="${UI.esc(r.poster_path)}" target="_blank" rel="noopener">View file</a></dd>` : ''}
+                    ${r.proposal_path ? `<dt>Proposal</dt><dd><a href="${UI.esc(r.proposal_path)}" target="_blank" rel="noopener">View document</a></dd>` : ''}
+                  </dl>
+                  <h4 style="margin:14px 0 4px">Description</h4>
+                  <p style="white-space:pre-wrap">${UI.esc(r.description)}</p>
+                  ${r.objectives ? `<h4 style="margin:14px 0 4px">Objectives</h4><p style="white-space:pre-wrap">${UI.esc(r.objectives)}</p>` : ''}
+                  ${r.rules ? `<h4 style="margin:14px 0 4px">Rules</h4><p style="white-space:pre-wrap">${UI.esc(r.rules)}</p>` : ''}
+                  ${r.history.length ? `
+                    <h4 style="margin:14px 0 4px">History</h4>
+                    <ul class="timeline">${r.history.map((h) => `
+                      <li><div class="tl-head">${h.old_status ? UI.categoryLabel(h.old_status) + ' &rarr; ' : ''}${UI.categoryLabel(h.new_status)}
+                        <span class="tl-time">${UI.fmtDateTime(h.created_at)}${h.changed_by_name ? ' &middot; ' + UI.esc(h.changed_by_name) : ''}</span></div>
+                        ${h.remarks ? `<div class="tl-note">${UI.esc(h.remarks)}</div>` : ''}</li>`).join('')}</ul>` : ''}`;
+
+                const actionable = !['APPROVED', 'REJECTED'].includes(r.status);
+                actionArea.innerHTML = actionable ? `
+                  <button class="btn" id="act-approve">&#9989; Approve Event</button>
+                  <button class="btn btn-danger" id="act-reject">&#10060; Reject</button>
+                  <button class="btn btn-secondary" id="act-changes">Request Changes</button>` : `
+                  <span style="align-self:center;color:var(--muted);font-size:13px">Decision recorded - no further action.</span>`;
+                modal.style.display = 'flex';
+
+                const ap = document.getElementById('act-approve');
+                if (ap) ap.addEventListener('click', () => act('approve'));
+                const rj = document.getElementById('act-reject');
+                if (rj) rj.addEventListener('click', () => act('reject'));
+                const ch = document.getElementById('act-changes');
+                if (ch) ch.addEventListener('click', () => act('changes'));
+              } catch (err) { UI.toast(err.message, 'error'); }
+            });
+          });
+        } catch (err) {
+          box.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        }
+      }
+
+      document.getElementById('status-filter').addEventListener('change', load);
+      load();
+    })();
+  </script>
+</body>
+</html>

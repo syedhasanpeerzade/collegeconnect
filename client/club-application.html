@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Apply to Club - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="container-narrow">
+    <div class="breadcrumbs"><a href="/clubs.html">Clubs</a> / Apply</div>
+    <div id="content"><div class="loading">Loading application form...</div></div>
+  </div>
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      const box = document.getElementById('content');
+      const user = Auth.user();
+      const clubId = new URLSearchParams(location.search).get('club');
+
+      if (!user) { location.href = '/login.html?next=' + encodeURIComponent(location.pathname + location.search); return; }
+      if (user.role !== 'STUDENT') { box.innerHTML = UI.empty('Only students can apply to clubs'); return; }
+      if (!clubId) { box.innerHTML = UI.empty('Club not specified'); return; }
+
+      let club;
+      try {
+        const res = await API.get(`/clubs/${clubId}`);
+        club = res.data;
+      } catch (err) { box.innerHTML = UI.empty('Club not found', err.message); return; }
+
+      if (club.my_membership && club.my_membership.is_active) {
+        box.innerHTML = UI.empty('You are already a member of this club'); return;
+      }
+      if (club.my_application && ['SUBMITTED', 'UNDER_REVIEW', 'APPROVED'].includes(club.my_application.status)) {
+        box.innerHTML = UI.empty('Application already in progress', `Application ${club.my_application.public_id} - status: ${club.my_application.status}`);
+        return;
+      }
+
+      const questions = club.custom_questions || [];
+      box.innerHTML = `
+        <div class="page-head"><div>
+          <h1>Apply to ${UI.esc(club.name)}</h1>
+          <div class="sub">Recruitment is ${club.recruitment_status === 'OPEN' ? 'open' : 'closed'} &middot; Your details are prefilled from your profile.</div>
+        </div></div>
+        <form id="app-form" class="card form-grid" novalidate>
+          <fieldset>
+            <legend>Your details</legend>
+            <div class="form-row-3">
+              <div class="field"><label>Full name</label><input value="${UI.esc(user.full_name)}" disabled></div>
+              <div class="field"><label>Student ID</label><input value="${UI.esc(user.student_id || '-')}" disabled></div>
+              <div class="field"><label>Email</label><input value="${UI.esc(user.email)}" disabled></div>
+            </div>
+            <p class="hint" style="margin:8px 0 0">Department, year and phone are taken from your profile automatically.</p>
+          </fieldset>
+          <fieldset>
+            <legend>Application</legend>
+            <div class="field">
+              <label for="why_join">Why do you want to join? *</label>
+              <textarea id="why_join" required minlength="20" placeholder="What draws you to this club and what will you contribute?"></textarea>
+            </div>
+            <div class="form-row" style="margin-top:14px">
+              <div class="field"><label for="experience">Previous experience</label>
+                <textarea id="experience" style="min-height:70px" placeholder="Projects, teams, competitions..."></textarea></div>
+              <div class="field"><label for="skills">Skills</label>
+                <input id="skills" placeholder="e.g. Python, video editing, event management"></div>
+            </div>
+            <div class="field" style="margin-top:14px">
+              <label for="interests">Interests</label>
+              <input id="interests" placeholder="e.g. Robotics, astrophotography">
+            </div>
+          </fieldset>
+          ${questions.length ? `
+          <fieldset>
+            <legend>Questions from the coordinators</legend>
+            <div class="form-grid">
+              ${questions.map((q) => `
+                <div class="field">
+                  <label>${UI.esc(q.question)} ${q.is_required ? '*' : ''}</label>
+                  ${q.field_type === 'TEXTAREA'
+                    ? `<textarea data-qid="${q.id}" data-required="${q.is_required ? 1 : 0}"></textarea>`
+                    : q.field_type === 'SELECT'
+                      ? `<select data-qid="${q.id}" data-required="${q.is_required ? 1 : 0}">
+                          <option value="">Select...</option>
+                          ${String(q.options || '').split(',').map((o) => `<option>${UI.esc(o.trim())}</option>`).join('')}
+                        </select>`
+                      : `<input data-qid="${q.id}" data-required="${q.is_required ? 1 : 0}">`}
+                </div>`).join('')}
+            </div>
+          </fieldset>` : ''}
+          <div id="form-msg"></div>
+          <div style="display:flex;gap:10px">
+            <button class="btn" type="submit" id="submit-btn">Submit Application</button>
+            <a class="btn btn-secondary" href="/club-details.html?id=${clubId}">Back to club</a>
+          </div>
+        </form>`;
+
+      document.getElementById('app-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const msg = document.getElementById('form-msg');
+        msg.innerHTML = '';
+        const answers = {};
+        let missing = null;
+        box.querySelectorAll('[data-qid]').forEach((el) => {
+          const v = el.value.trim();
+          if (v) answers[el.dataset.qid] = v;
+          else if (el.dataset.required === '1' && !missing) missing = el;
+        });
+        if (missing) {
+          msg.innerHTML = '<div class="error-box">Please answer all required coordinator questions.</div>';
+          missing.focus();
+          return;
+        }
+        const btn = document.getElementById('submit-btn');
+        btn.disabled = true; btn.textContent = 'Submitting...';
+        try {
+          const res = await API.post(`/clubs/${clubId}/apply`, {
+            why_join: document.getElementById('why_join').value.trim(),
+            experience: document.getElementById('experience').value.trim(),
+            skills: document.getElementById('skills').value.trim(),
+            interests: document.getElementById('interests').value.trim(),
+            answers,
+          });
+          UI.toast(res.message, 'success');
+          location.href = '/my-clubs.html';
+        } catch (err) {
+          msg.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+          btn.disabled = false; btn.textContent = 'Submit Application';
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

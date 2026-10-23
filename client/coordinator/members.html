@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Club Members - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="container">
+    <div class="page-head">
+      <div><h1>Club Members</h1><div class="sub">Change roles or remove members when authorized.</div></div>
+      <a class="btn btn-secondary" href="/coordinator/index.html">Back to workspace</a>
+    </div>
+    <div id="content"><div class="loading">Loading...</div></div>
+  </div>
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      const user = Auth.requireRole(['CLUB_COORDINATOR', 'ADMIN', 'FACULTY']);
+      if (!user) return;
+      const box = document.getElementById('content');
+      const clubId = new URLSearchParams(location.search).get('club');
+      if (!clubId) { box.innerHTML = UI.empty('Select a club from the coordinator dashboard first'); return; }
+
+      async function load() {
+        box.innerHTML = UI.loadingBox('Loading members...');
+        try {
+          const res = await API.get(`/clubs/${clubId}`);
+          const club = res.data;
+          box.innerHTML = `
+            <h2 style="font-size:17px">${UI.esc(club.name)} <span class="count-pill">${club.member_count} members</span></h2>
+            <div class="table-wrap"><table>
+              <thead><tr><th>Name</th><th>Student ID</th><th>Department</th><th>Role</th><th>Joined</th><th></th></tr></thead>
+              <tbody>
+                ${club.members.map((m) => `
+                  <tr>
+                    <td data-label="Name">${UI.esc(m.full_name)}</td>
+                    <td data-label="ID">${UI.esc(m.student_id || '-')}</td>
+                    <td data-label="Dept">${UI.esc(m.department || '-')}</td>
+                    <td data-label="Role">
+                      <select data-role-member="${m.id}" style="width:auto">
+                        ${['MEMBER', 'CORE_MEMBER', 'STUDENT_COORDINATOR'].map((r) =>
+                          `<option value="${r}" ${m.role === r ? 'selected' : ''}>${UI.categoryLabel(r)}</option>`).join('')}
+                      </select>
+                    </td>
+                    <td data-label="Joined">${UI.fmtDate(m.joined_at)}</td>
+                    <td data-label="">
+                      <button class="btn btn-sm btn-danger" data-remove="${m.id}" data-name="${UI.esc(m.full_name)}">Remove</button>
+                    </td>
+                  </tr>`).join('')}
+              </tbody>
+            </table></div>
+            <hr class="divider">
+            <div class="card">
+              <h3>Recruitment</h3>
+              <p style="font-size:14px;color:var(--ink-soft);margin:0 0 10px">Current status:
+                ${UI.statusBadge(club.recruitment_status)}</p>
+              <button class="btn btn-sm" id="toggle-rec">${club.recruitment_status === 'OPEN' ? 'Close recruitment' : 'Open recruitment'}</button>
+            </div>`;
+
+          box.querySelectorAll('[data-role-member]').forEach((sel) => {
+            sel.addEventListener('change', async () => {
+              try {
+                await API.put(`/clubs/${clubId}/members/${sel.dataset.roleMember}`, { role: sel.value });
+                UI.toast('Role updated', 'success');
+              } catch (err) { UI.toast(err.message, 'error'); load(); }
+            });
+          });
+
+          box.querySelectorAll('[data-remove]').forEach((b) => {
+            b.addEventListener('click', async () => {
+              if (!(await UI.confirm(`Remove ${b.dataset.name} from ${club.name}?`, { confirmText: 'Remove' }))) return;
+              try {
+                const res = await API.del(`/clubs/${clubId}/members/${b.dataset.remove}`);
+                UI.toast(res.message, 'success');
+                load();
+              } catch (err) { UI.toast(err.message, 'error'); }
+            });
+          });
+
+          document.getElementById('toggle-rec').addEventListener('click', async () => {
+            const next = club.recruitment_status === 'OPEN' ? 'CLOSED' : 'OPEN';
+            try {
+              await API.put(`/clubs/${clubId}`, { recruitment_status: next });
+              UI.toast(`Recruitment is now ${next.toLowerCase()}`, 'success');
+              load();
+            } catch (err) { UI.toast(err.message, 'error'); }
+          });
+        } catch (err) {
+          box.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        }
+      }
+      load();
+    })();
+  </script>
+</body>
+</html>

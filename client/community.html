@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Community - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/social.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+
+  <div class="social-shell">
+    <aside class="social-sidebar"><nav class="snav" id="snav"></nav></aside>
+
+    <main>
+      <div id="comm-head"><div class="loading">Loading community...</div></div>
+
+      <div class="feed-tabs" id="feed-tabs" style="display:none">
+        <button data-tab="foryou" class="active">Latest</button>
+        <button data-tab="trending">Trending &#128293;</button>
+      </div>
+
+      <div id="feed"><div class="loading">Loading posts...</div></div>
+      <div class="load-more-wrap"><button class="btn btn-secondary" id="load-more" style="display:none">Load more</button></div>
+    </main>
+
+    <aside class="social-rail">
+      <div class="card rail-card" id="rail-about"><h3>About</h3></div>
+    </aside>
+  </div>
+
+  <nav class="mobile-tabbar" id="tabbar"></nav>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/social.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      Social.chrome('/communities.html');
+      const user = Auth.user();
+      const slug = new URLSearchParams(location.search).get('slug') || '';
+      const headEl = document.getElementById('comm-head');
+      const feedEl = document.getElementById('feed');
+      const loadMoreBtn = document.getElementById('load-more');
+
+      if (!slug) { headEl.innerHTML = '<div class="error-box">No community specified.</div>'; feedEl.innerHTML = ''; return; }
+
+      let comm;
+      try {
+        const res = await API.get(`/social/communities/${encodeURIComponent(slug)}`);
+        comm = res.data;
+      } catch (err) {
+        headEl.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        feedEl.innerHTML = '';
+        return;
+      }
+
+      document.title = `${comm.name} - CollegeConnect`;
+      const aboutEl = document.getElementById('rail-about');
+      aboutEl.innerHTML = `<h3>About</h3>
+        <div style="font-size:13.5px;color:var(--ink-soft)">${UI.esc(comm.description || 'A campus community.')}</div>
+        <div style="font-size:12.5px;color:var(--muted);margin-top:8px" id="about-counts"></div>`;
+      function renderCounts() {
+        const label = `${comm.member_count} member${comm.member_count === 1 ? '' : 's'} · ${comm.post_count} post${comm.post_count === 1 ? '' : 's'}`;
+        document.getElementById('about-counts').textContent = label;
+        const headCounts = document.getElementById('head-counts');
+        if (headCounts) headCounts.textContent = label;
+      }
+
+      headEl.innerHTML = `
+        <div class="card fade-in" style="overflow:hidden;margin-bottom:16px">
+          <div class="profile-cover" style="height:120px"></div>
+          <div class="profile-head" style="padding-bottom:16px">
+            <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+              <span class="profile-ava" style="width:70px;height:70px;font-size:26px">#</span>
+              <div style="flex:1;min-width:200px">
+                <h1 style="margin:0;font-size:20px">#${UI.esc(comm.name)}</h1>
+                <div class="profile-sub">${UI.esc(comm.description || '')}</div>
+                <div class="profile-sub" id="head-counts"></div>
+              </div>
+              <div style="display:flex;gap:10px">
+                ${user
+                  ? `<button class="btn ${comm.joined ? 'btn-secondary' : ''}" id="join-btn">${comm.joined ? 'Joined &#10003;' : 'Join'}</button>
+                     <a class="btn btn-secondary" href="/feed.html">Post in Feed</a>`
+                  : `<a class="btn" href="/login.html?next=${encodeURIComponent(location.pathname + location.search)}">Log in to join</a>`}
+              </div>
+            </div>
+          </div>
+        </div>`;
+
+      renderCounts();
+
+      const joinBtn = document.getElementById('join-btn');
+      if (joinBtn) {
+        joinBtn.addEventListener('click', async () => {
+          joinBtn.disabled = true;
+          try {
+            const r = await API.put(`/social/communities/${comm.id}/join`);
+            comm.joined = r.data.joined;
+            if (typeof r.data.member_count === 'number') comm.member_count = r.data.member_count;
+            else comm.member_count = Math.max(0, (comm.member_count || 0) + (comm.joined ? 1 : -1));
+            joinBtn.classList.toggle('btn-secondary', comm.joined);
+            joinBtn.innerHTML = comm.joined ? 'Joined &#10003;' : 'Join';
+            renderCounts();
+            UI.toast(r.message, 'success');
+          } catch (err) { UI.toast(err.message, 'error'); }
+          joinBtn.disabled = false;
+        });
+      }
+
+      /* ---------- Community feed ---------- */
+      let tab = 'foryou';
+      let page = 1;
+      let hasMore = false;
+
+      async function loadFeed(reset = true) {
+        if (reset) { page = 1; feedEl.innerHTML = '<div class="loading">Loading posts...</div>'; }
+        try {
+          const res = await API.get(`/social/feed?community_id=${comm.id}&tab=${tab}&page=${page}`);
+          hasMore = res.data.hasMore;
+          if (reset && !res.data.rows.length) {
+            feedEl.innerHTML = UI.empty('No posts here yet', 'Be the first to post — pick this community in the Feed composer!');
+          } else {
+            feedEl.innerHTML = (reset ? '' : feedEl.innerHTML) + res.data.rows.map((p) => Social.card(p, user)).join('');
+          }
+          loadMoreBtn.style.display = hasMore ? 'inline-flex' : 'none';
+        } catch (err) {
+          feedEl.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        }
+      }
+      document.getElementById('feed-tabs').style.display = 'flex';
+      document.getElementById('feed-tabs').addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-tab]');
+        if (!btn) return;
+        tab = btn.dataset.tab;
+        document.querySelectorAll('#feed-tabs button').forEach((b) => b.classList.toggle('active', b === btn));
+        loadFeed();
+      });
+      loadMoreBtn.addEventListener('click', () => { page += 1; loadFeed(false); });
+      Social.bindInteractions(feedEl);
+      loadFeed();
+    })();
+  </script>
+</body>
+</html>

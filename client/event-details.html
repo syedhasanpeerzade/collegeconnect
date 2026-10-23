@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Event Details - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="container-narrow">
+    <div class="breadcrumbs"><a href="/events.html">Events</a> / Details</div>
+    <div id="content"><div class="loading">Loading event...</div></div>
+  </div>
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      const box = document.getElementById('content');
+      const id = new URLSearchParams(location.search).get('id');
+      if (!id) { box.innerHTML = UI.empty('Event not found', 'No event ID given.'); return; }
+
+      let ev;
+      try {
+        const res = await API.get(`/events/${id}`);
+        ev = res.data;
+      } catch (err) {
+        box.innerHTML = UI.empty('Event not found', err.message);
+        return;
+      }
+
+      const user = Auth.user();
+      const isStudent = user && user.role === 'STUDENT';
+      const state = ev.registration_state;
+      const regBtn = () => {
+        if (!user) return `<a class="btn btn-lg" href="/login.html?next=${encodeURIComponent('/event-details.html?id=' + id)}">Login to register</a>`;
+        if (!isStudent) return '';
+        if (state === 'REGISTERED') return `<button class="btn btn-lg btn-secondary" disabled>REGISTERED &#10003;</button>
+          <button class="btn btn-danger btn-lg" id="cancel-btn" style="margin-left:10px">Cancel registration</button>`;
+        if (state === 'REGISTRATION_FULL') return '<button class="btn btn-lg" disabled>REGISTRATION FULL</button>';
+        if (state === 'REGISTRATION_CLOSED') return '<button class="btn btn-lg btn-secondary" disabled>REGISTRATION CLOSED</button>';
+        return `<button class="btn btn-lg" id="register-btn">REGISTER NOW</button>`;
+      };
+
+      const winners = ev.previous_winners && ev.previous_winners.length
+        ? `<div class="card section">
+            <h3>&#127942; Previous Winners</h3>
+            <div class="table-wrap"><table>
+              <thead><tr><th>Year</th><th>Winner</th><th>Position</th></tr></thead>
+              <tbody>
+                ${ev.previous_winners.map((w) => `
+                  <tr>
+                    <td data-label="Year">${w.year}</td>
+                    <td data-label="Winner">${UI.esc(w.winners.map((x) => x.name || x.team).filter(Boolean).join(', ')) || UI.esc(w.title)}</td>
+                    <td data-label="Position">${UI.statusBadge(w.position)}</td>
+                  </tr>`).join('')}
+              </tbody>
+            </table></div>
+            <p style="font-size:12.5px;color:var(--muted);margin:10px 0 0">Results shown are verified records from past editions of this competition.</p>
+          </div>`
+        : '';
+
+      box.innerHTML = `
+        ${ev.poster_path ? `<img src="${UI.esc(ev.poster_path)}" alt="Event poster" style="border-radius:10px;border:1px solid var(--line);margin-bottom:18px;max-height:340px;object-fit:cover;width:100%">` : ''}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          ${UI.statusBadge(ev.category)}${UI.statusBadge(ev.event_type)}
+          ${ev.status !== 'SCHEDULED' ? UI.statusBadge(ev.status) : ''}
+        </div>
+        <h1 style="font-size:26px">${UI.esc(ev.title)}</h1>
+        <p style="color:var(--ink-soft)">${UI.esc(ev.description).replace(/\n/g, '<br>')}</p>
+
+        <div class="grid grid-2">
+          <div class="card">
+            <h3>Event details</h3>
+            <dl class="kv">
+              <dt>Date</dt><dd>${UI.fmtDate(ev.event_date)}</dd>
+              <dt>Time</dt><dd>${UI.fmtTime(ev.start_time)} - ${UI.fmtTime(ev.end_time)}</dd>
+              <dt>Venue</dt><dd>${UI.esc(ev.venue)}</dd>
+              <dt>Category</dt><dd>${UI.categoryLabel(ev.category)}</dd>
+              ${ev.club_name ? `<dt>Club</dt><dd>${UI.esc(ev.club_name)}</dd>` : ''}
+              ${ev.department_code ? `<dt>Department</dt><dd>${UI.esc(ev.department_code)}</dd>` : ''}
+              <dt>Organizer</dt><dd>${UI.esc(ev.organizer_name || '-')}</dd>
+              ${ev.faculty_coordinator_name ? `<dt>Faculty coordinator</dt><dd>${UI.esc(ev.faculty_coordinator_name)}</dd>` : ''}
+            </dl>
+          </div>
+          <div class="card">
+            <h3>Registration</h3>
+            <dl class="kv">
+              <dt>Status</dt><dd>${UI.fmtDate(ev.registration_deadline) ? UI.fmtDateTime(ev.registration_deadline) : '-'}</dd>
+              <dt>Seats</dt><dd>${ev.registration_count} of ${ev.max_participants} filled &middot; <b>${ev.seats_left} left</b></dd>
+              ${ev.eligibility ? `<dt>Eligibility</dt><dd>${UI.esc(ev.eligibility)}</dd>` : ''}
+              ${ev.contact_details ? `<dt>Contact</dt><dd>${UI.esc(ev.contact_details)}</dd>` : ''}
+              ${ev.public_id ? `<dt>Event ID</dt><dd class="mono">${UI.esc(ev.public_id)}</dd>` : ''}
+            </dl>
+            <hr class="divider">
+            <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px">${regBtn()}</div>
+            <div id="reg-msg" style="margin-top:10px"></div>
+          </div>
+        </div>
+
+        ${ev.rules ? `<div class="card section"><h3>Rules</h3><p style="margin:0">${UI.esc(ev.rules).replace(/\n/g, '<br>')}</p></div>` : ''}
+        ${winners}
+      `;
+
+      const regMsg = document.getElementById('reg-msg');
+      const regBtnEl = document.getElementById('register-btn');
+      if (regBtnEl) {
+        regBtnEl.addEventListener('click', async () => {
+          regBtnEl.disabled = true;
+          try {
+            const res = await API.post(`/events/${id}/register`);
+            regMsg.innerHTML = `<div class="ok-box">${UI.esc(res.message)}</div>`;
+            UI.toast('Registered successfully', 'success');
+            setTimeout(() => location.reload(), 1200);
+          } catch (err) {
+            regMsg.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+            regBtnEl.disabled = false;
+          }
+        });
+      }
+      const cancelBtn = document.getElementById('cancel-btn');
+      if (cancelBtn) {
+        cancelBtn.addEventListener('click', async () => {
+          if (!(await UI.confirm('Cancel your registration for this event?', { confirmText: 'Yes, cancel it' }))) return;
+          try {
+            const res = await API.del(`/events/${id}/register`);
+            UI.toast(res.message, 'success');
+            setTimeout(() => location.reload(), 900);
+          } catch (err) {
+            UI.toast(err.message, 'error');
+          }
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

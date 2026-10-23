@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Clubs - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="container">
+    <div class="page-head">
+      <div><h1>My Clubs</h1><div class="sub">Your memberships and application history.</div></div>
+      <a class="btn" href="/clubs.html">Browse clubs</a>
+    </div>
+    <div id="content"><div class="loading">Loading...</div></div>
+  </div>
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      const user = Auth.requireRole(['STUDENT', 'ORGANIZER', 'CLUB_COORDINATOR', 'FACULTY', 'ADMIN']);
+      if (!user) return;
+      const box = document.getElementById('content');
+      try {
+        const res = await API.get('/clubs/my-applications');
+        const { applications, memberships } = res.data;
+        const active = (memberships || []).filter((m) => m.is_active);
+        const past = (memberships || []).filter((m) => !m.is_active);
+
+        box.innerHTML = `
+          <div class="section">
+            <h2>Active memberships</h2>
+            ${active.length ? `<div class="grid grid-3">${active.map((m) => `
+              <div class="card">
+                <h3><a href="/club-details.html?id=${m.club_id}">${UI.esc(m.club_name)}</a></h3>
+                ${UI.statusBadge(m.role)}
+                <p style="font-size:13px;color:var(--muted);margin:8px 0 0">Member since ${UI.fmtDate(m.joined_at)}</p>
+              </div>`).join('')}</div>`
+              : UI.empty('No active memberships', 'Apply from the clubs page.')}
+          </div>
+
+          <div class="section">
+            <h2>Applications</h2>
+            ${(applications || []).length ? `<div class="table-wrap"><table>
+              <thead><tr><th>Club</th><th>Application ID</th><th>Applied on</th><th>Status</th><th>Remarks</th></tr></thead>
+              <tbody>
+                ${(applications || []).map((a) => `
+                  <tr>
+                    <td data-label="Club"><a href="/club-details.html?id=${a.club_id}">${UI.esc(a.club_name)}</a></td>
+                    <td data-label="App ID" class="mono">${UI.esc(a.public_id)}</td>
+                    <td data-label="Applied">${UI.fmtDate(a.created_at)}</td>
+                    <td data-label="Status">${UI.statusBadge(a.status)}</td>
+                    <td data-label="Remarks">${a.status === 'REJECTED' ? UI.esc(a.rejection_reason || '-') : '-'}</td>
+                  </tr>`).join('')}
+              </tbody></table></div>`
+              : UI.empty('No applications yet')}
+          </div>
+
+          ${past.length ? `
+          <div class="section">
+            <h2>Past memberships</h2>
+            <div class="table-wrap"><table><tbody>
+              ${past.map((m) => `<tr><td data-label="Club">${UI.esc(m.club_name)}</td><td data-label="Status"><span class="badge badge-gray">Left / removed</span></td></tr>`).join('')}
+            </tbody></table></div>` : ''}
+        `;
+      } catch (err) {
+        box.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+      }
+    })();
+  </script>
+</body>
+</html>

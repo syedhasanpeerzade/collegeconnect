@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>User Management - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="container">
+    <div class="admin-layout">
+      <aside class="side-nav">
+        <a href="/admin/index.html">Dashboard</a>
+        <a href="/admin/users.html" class="active">Users</a>
+        <a href="/admin/content.html">Manage Content</a>
+        <a href="/admin/import.html">Bulk Import</a>
+        <a href="/admin/approvals.html">Event Approvals</a>
+        <a href="/admin/achievements.html">Achievements</a>
+        <a href="/admin/qr.html">College QR Code</a>
+        <a href="/admin/reports.html">Reports</a>
+        <a href="/faculty/complaints.html">Complaints</a>
+        <a href="/announcements.html">Announcements</a>
+      </aside>
+
+      <main>
+        <div class="page-head">
+          <div><h1>User Management</h1><div class="sub">All platform accounts.</div></div>
+          <button class="btn" id="new-user">Create Staff Account</button>
+        </div>
+
+        <div class="filter-bar">
+          <input type="search" class="search" id="f-search" placeholder="Search name, email, ID...">
+          <select id="f-role">
+            <option value="">All roles</option>
+            <option>STUDENT</option><option>ORGANIZER</option><option>CLUB_COORDINATOR</option>
+            <option>FACULTY</option><option>ADMIN</option>
+          </select>
+          <select id="f-dept"><option value="">All departments</option></select>
+          <select id="f-status">
+            <option value="">Any status</option>
+            <option value="active">Active</option>
+            <option value="inactive">Deactivated</option>
+          </select>
+          <button class="btn btn-sm" id="f-apply">Apply</button>
+        </div>
+
+        <div id="content"><div class="loading">Loading users...</div></div>
+      </main>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="user-modal" style="display:none">
+    <div class="modal">
+      <h3>Create account</h3>
+      <form id="user-form" class="form-grid" novalidate>
+        <div class="field"><label for="u-name">Full name *</label><input id="u-name" required></div>
+        <div class="form-row">
+          <div class="field"><label for="u-email">Email *</label><input type="email" id="u-email" required></div>
+          <div class="field"><label for="u-phone">Phone *</label><input id="u-phone" required></div>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label for="u-role">Role *</label>
+            <select id="u-role">
+              <option>STUDENT</option><option>ORGANIZER</option><option>CLUB_COORDINATOR</option>
+              <option selected>FACULTY</option><option>ADMIN</option>
+            </select>
+          </div>
+          <div class="field"><label for="u-student-id">Student / Staff ID</label><input id="u-student-id"></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label for="u-dept">Department</label><select id="u-dept"><option value="">None</option></select></div>
+          <div class="field"><label for="u-pass">Temporary password *</label><input id="u-pass" required minlength="8" value="Password@123"></div>
+        </div>
+        <div id="form-msg"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" id="close-user">Cancel</button>
+          <button type="submit" class="btn">Create Account</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      const user = Auth.requireRole(['ADMIN']);
+      if (!user) return;
+      const box = document.getElementById('content');
+      const modal = document.getElementById('user-modal');
+
+      document.getElementById('new-user').addEventListener('click', () => { modal.style.display = 'flex'; });
+      document.getElementById('close-user').addEventListener('click', () => { modal.style.display = 'none'; });
+      modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
+
+      // Departments for filters and form
+      try {
+        const res = await API.get('/admin/departments');
+        const opts = (res.data || []).map((d) => `<option value="${d.id}">${UI.esc(d.code)}</option>`).join('');
+        document.getElementById('f-dept').innerHTML = '<option value="">All departments</option>' + opts;
+        document.getElementById('u-dept').innerHTML = '<option value="">None</option>' + opts;
+      } catch (_e) { /* filters still work */ }
+
+      async function load() {
+        box.innerHTML = UI.loadingBox('Loading users...');
+        try {
+          const p = new URLSearchParams();
+          const s = document.getElementById('f-search').value.trim();
+          const r = document.getElementById('f-role').value;
+          const d = document.getElementById('f-dept').value;
+          const st = document.getElementById('f-status').value;
+          if (s) p.set('search', s);
+          if (r) p.set('role', r);
+          if (d) p.set('department', d);
+          if (st) p.set('status', st);
+          const res = await API.get(`/admin/users?${p.toString()}`);
+          const rows = res.data || [];
+          if (!rows.length) { box.innerHTML = UI.empty('No users match the filters'); return; }
+          box.innerHTML = `<div class="table-wrap"><table>
+            <thead><tr><th>Name</th><th>ID</th><th>Email</th><th>Dept</th><th>Year</th><th>Role</th><th>Status</th><th></th></tr></thead>
+            <tbody>${rows.map((u) => `
+              <tr>
+                <td data-label="Name">${UI.esc(u.full_name)}</td>
+                <td data-label="ID">${UI.esc(u.student_id || '-')}</td>
+                <td data-label="Email">${UI.esc(u.email)}</td>
+                <td data-label="Dept">${UI.esc(u.department_code || '-')}</td>
+                <td data-label="Year">${u.year || '-'}</td>
+                <td data-label="Role">
+                  <select data-role-user="${u.id}" style="width:auto" ${u.id === user.id ? 'disabled' : ''}>
+                    ${['STUDENT', 'ORGANIZER', 'CLUB_COORDINATOR', 'FACULTY', 'ADMIN'].map((ro) =>
+                      `<option value="${ro}" ${u.role === ro ? 'selected' : ''}>${UI.categoryLabel(ro)}</option>`).join('')}
+                  </select>
+                </td>
+                <td data-label="Status">${u.is_active ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-gray">Inactive</span>'}</td>
+                <td data-label="">
+                  ${u.id !== user.id ? `<button class="btn btn-sm ${u.is_active ? 'btn-danger' : ''}" data-toggle="${u.id}" data-active="${u.is_active ? 1 : 0}" data-name="${UI.esc(u.full_name)}">
+                    ${u.is_active ? 'Deactivate' : 'Activate'}</button>` : '<span class="badge badge-teal">You</span>'}
+                </td>
+              </tr>`).join('')}</tbody>
+          </table></div>`;
+
+          box.querySelectorAll('[data-toggle]').forEach((b) => {
+            b.addEventListener('click', async () => {
+              const active = b.dataset.active === '1';
+              if (!(await UI.confirm(`${active ? 'Deactivate' : 'Activate'} account for ${b.dataset.name}?`, { confirmText: 'Yes' }))) return;
+              try {
+                const res = await API.put(`/admin/users/${b.dataset.toggle}/status`, { is_active: !active });
+                UI.toast(res.message, 'success');
+                load();
+              } catch (err) { UI.toast(err.message, 'error'); }
+            });
+          });
+
+          box.querySelectorAll('[data-role-user]').forEach((sel) => {
+            sel.addEventListener('change', async () => {
+              try {
+                await API.put(`/admin/users/${sel.dataset.roleUser}/role`, { role: sel.value });
+                UI.toast('Role updated', 'success');
+              } catch (err) { UI.toast(err.message, 'error'); load(); }
+            });
+          });
+        } catch (err) {
+          box.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        }
+      }
+
+      document.getElementById('f-apply').addEventListener('click', load);
+      document.getElementById('f-search').addEventListener('keydown', (e) => { if (e.key === 'Enter') load(); });
+
+      document.getElementById('user-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const msg = document.getElementById('form-msg');
+        msg.innerHTML = '';
+        try {
+          const res = await API.post('/auth/users', {
+            full_name: document.getElementById('u-name').value.trim(),
+            email: document.getElementById('u-email').value.trim(),
+            phone: document.getElementById('u-phone').value.trim(),
+            role: document.getElementById('u-role').value,
+            student_id: document.getElementById('u-student-id').value.trim(),
+            department_id: document.getElementById('u-dept').value || null,
+            password: document.getElementById('u-pass').value,
+          });
+          UI.toast(res.message, 'success');
+          modal.style.display = 'none';
+          e.target.reset();
+          document.getElementById('u-pass').value = 'Password@123';
+          load();
+        } catch (err) {
+          msg.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        }
+      });
+
+      load();
+    })();
+  </script>
+</body>
+</html>

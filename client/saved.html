@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Saved - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/social.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+
+  <div class="social-shell">
+    <aside class="social-sidebar"><nav class="snav" id="snav"></nav></aside>
+
+    <main>
+      <div class="feed-hero">
+        <h1>Saved</h1>
+        <p>Posts you bookmarked, kept in one place.</p>
+      </div>
+      <div id="feed"><div class="loading">Loading saved posts...</div></div>
+    </main>
+
+    <aside class="social-rail">
+      <div class="card rail-card" style="font-size:12.5px;color:var(--muted)">
+        Tap the bookmark icon on any post to save it here. Unsaving removes it from this list.
+      </div>
+    </aside>
+  </div>
+
+  <nav class="mobile-tabbar" id="tabbar"></nav>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/social.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      Social.chrome('/saved.html');
+      const user = Auth.user();
+      const feedEl = document.getElementById('feed');
+
+      if (!user) {
+        feedEl.innerHTML = UI.empty('Log in to see your saved posts',
+          '<a href="/login.html?next=%2Fsaved.html">Log in</a>');
+        return;
+      }
+
+      async function load() {
+        feedEl.innerHTML = '<div class="loading">Loading saved posts...</div>';
+        try {
+          const res = await API.get('/social/saved');
+          const rows = res.data || [];
+          if (!rows.length) {
+            feedEl.innerHTML = UI.empty('Nothing saved yet', 'Bookmark a post from the feed and it will show up here.');
+            return;
+          }
+          feedEl.innerHTML = rows.map((p) => Social.card(p, user)).join('');
+        } catch (err) {
+          feedEl.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        }
+      }
+
+      // Un-saving a post should drop it from this list right away.
+      Social.bindInteractions(feedEl, {
+        onChange: load,
+        afterSave: (saved, card) => {
+          if (saved) return;
+          card.remove();
+          if (!feedEl.querySelector('.post-card')) {
+            feedEl.innerHTML = UI.empty('Nothing saved yet', 'Bookmark a post from the feed and it will show up here.');
+          }
+        },
+      });
+      load();
+    })();
+  </script>
+</body>
+</html>

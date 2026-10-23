@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Achievement Details - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="container-narrow">
+    <div class="breadcrumbs"><a href="/achievements.html">Achievements</a> / Details</div>
+    <div id="content"><div class="loading">Loading achievement...</div></div>
+  </div>
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      const box = document.getElementById('content');
+      const id = new URLSearchParams(location.search).get('id');
+      if (!id) { box.innerHTML = UI.empty('Achievement not found'); return; }
+
+      let a;
+      try {
+        const res = await API.get(`/achievements/${id}`);
+        a = res.data;
+      } catch (err) { box.innerHTML = UI.empty('Achievement not found', err.message); return; }
+
+      box.innerHTML = `
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+          ${UI.statusBadge(a.category)}
+          ${UI.statusBadge(a.verification_status)}
+          ${a.is_archived ? '<span class="badge badge-gray">Archived</span>' : ''}
+        </div>
+        <h1 style="font-size:26px">${UI.esc(a.title)}</h1>
+        <p style="color:var(--ink-soft)">${UI.esc(a.description || '')}</p>
+
+        <div class="grid grid-2">
+          <div class="card">
+            <h3>Competition</h3>
+            <dl class="kv">
+              <dt>Competition</dt><dd>${UI.esc(a.competition_name)}</dd>
+              <dt>Year</dt><dd>${a.achievement_year}</dd>
+              <dt>Position</dt><dd><span class="pos-${UI.esc(a.position)}">${UI.positionLabel(a.position)}</span></dd>
+              <dt>Category</dt><dd>${UI.categoryLabel(a.category)}</dd>
+              ${a.event_title ? `<dt>Linked event</dt><dd><a href="/event-details.html?id=${a.event_id}">${UI.esc(a.event_title)}</a></dd>` : ''}
+              ${a.club_name ? `<dt>Club</dt><dd><a href="/club-details.html?id=${a.club_id}">${UI.esc(a.club_name)}</a></dd>` : ''}
+              ${a.department_name ? `<dt>Department</dt><dd>${UI.esc(a.department_name)}</dd>` : ''}
+            </dl>
+          </div>
+          <div class="card">
+            <h3>Verification</h3>
+            <dl class="kv">
+              <dt>Status</dt><dd>${UI.statusBadge(a.verification_status)}</dd>
+              <dt>Verified by</dt><dd>${UI.esc(a.verified_by_name || 'Pending')}</dd>
+              <dt>Recorded by</dt><dd>${UI.esc(a.created_by_name || '-')}</dd>
+              <dt>Record ID</dt><dd class="mono">${UI.esc(a.public_id)}</dd>
+            </dl>
+            <p class="hint" style="margin-top:10px">Demo notice: achievement records in this deployment are sample data for illustration and do not represent real college results.</p>
+          </div>
+        </div>
+
+        <div class="card section">
+          <h3>Winner${a.winners.length === 1 ? '' : 's'}</h3>
+          ${a.winners.length ? `<div class="table-wrap"><table>
+            <thead><tr><th>Name / Team</th><th>Award</th><th>Role</th><th>Description</th><th>Department</th></tr></thead>
+            <tbody>
+              ${a.winners.map((w) => `
+                <tr>
+                  <td data-label="Winner">${UI.esc(w.winner_name || w.team_name || (w.linked_user_name || '-'))}</td>
+                  <td data-label="Award">${w.position ? UI.positionLabel(w.position) : '<span style="color:var(--muted)">-</span>'}</td>
+                  <td data-label="Role">${UI.statusBadge(w.role)}</td>
+                  <td data-label="Description">${UI.esc(w.description || '-')}</td>
+                  <td data-label="Department">${UI.esc(w.department_code || '-')}</td>
+                </tr>`).join('')}
+            </tbody></table></div>`
+            : '<p style="color:var(--muted)">No winners recorded.</p>'}
+        </div>
+
+        ${a.media.length ? `
+        <div class="card section">
+          <h3>Photos &amp; certificates ${a.photo_count ? `<button class="btn btn-sm" id="open-gallery" style="float:right">View all photos (${a.photo_count})</button>` : ''}</h3>
+          <div class="media-grid">
+            ${a.media.map((m, i) => m.file_type === 'CERTIFICATE' || /\.pdf$/i.test(m.file_path)
+              ? `<a href="${UI.esc(m.file_path)}" target="_blank" rel="noopener" class="card" style="text-align:center;padding:24px">Certificate (PDF)</a>`
+              : `<img src="${UI.esc(m.file_path)}" alt="Achievement photo" data-photo-i="${i}" style="max-height:220px;object-fit:cover;cursor:pointer;border-radius:8px">`).join('')}
+          </div>
+        </div>` : ''}
+
+        ${!a.media.length ? `<div class="card section"><p style="color:var(--muted)">No photos uploaded yet. An admin can add winner and team photos from the Achievements dashboard.</p></div>` : ''}
+      `;
+
+      // ---- Photo gallery wiring ----
+      const photos = (a.media || []).filter((m) => m.file_type !== 'CERTIFICATE' && !/\.pdf$/i.test(m.file_path));
+      const openAt = (idx) => UI.openGallery({
+        photos,
+        title: a.title,
+        subtitle: a.team_name || a.winner_names || '',
+        positionText: UI.positionLabel(a.position),
+        startIndex: idx,
+      });
+      const galBtn = document.getElementById('open-gallery');
+      if (galBtn) galBtn.addEventListener('click', () => openAt(0));
+      box.querySelectorAll('[data-photo-i]').forEach((img) =>
+        img.addEventListener('click', () => openAt(+img.getAttribute('data-photo-i'))));
+    })();
+  </script>
+</body>
+</html>

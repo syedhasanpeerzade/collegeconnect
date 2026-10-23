@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Register - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <style>
+    .role-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .role-card {
+      border: 2px solid var(--border, #e2e8f0); border-radius: 10px;
+      padding: 12px 10px; text-align: center; cursor: pointer;
+      background: #fff; transition: border-color .15s, background .15s;
+    }
+    .role-card:hover { border-color: #0f766e; }
+    .role-card.selected { border-color: #0f766e; background: #f0fdfa; }
+    .role-card .role-icon { font-size: 22px; }
+    .role-card .role-name { font-weight: 600; font-size: 13px; margin-top: 4px; }
+    .role-card .role-desc { font-size: 11px; color: #64748b; margin-top: 2px; }
+    @media (max-width: 520px) { .role-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="auth-wrap">
+    <div class="auth-card" style="max-width:560px">
+      <h1>Create your account</h1>
+      <p class="lead">Choose how you'll use CollegeConnect. Admin and faculty accounts are created by the administrator.</p>
+      <div id="form-msg"></div>
+      <form id="register-form" class="form-grid" novalidate>
+        <div class="field">
+          <label>I am a</label>
+          <div class="role-grid" id="role-grid">
+            <div class="role-card selected" data-role="STUDENT" role="button" tabindex="0">
+              <div class="role-icon">🎓</div>
+              <div class="role-name">Student</div>
+              <div class="role-desc">Discover events, join clubs</div>
+            </div>
+            <div class="role-card" data-role="ORGANIZER" role="button" tabindex="0">
+              <div class="role-icon">📋</div>
+              <div class="role-name">Organizer</div>
+              <div class="role-desc">Propose &amp; run events</div>
+            </div>
+            <div class="role-card" data-role="CLUB_COORDINATOR" role="button" tabindex="0">
+              <div class="role-icon">🤝</div>
+              <div class="role-name">Club Coordinator</div>
+              <div class="role-desc">Manage a club &amp; recruits</div>
+            </div>
+          </div>
+          <input type="hidden" id="role" value="STUDENT">
+        </div>
+        <div class="field">
+          <label for="full_name">Full name</label>
+          <input type="text" id="full_name" required minlength="3" placeholder="e.g. Priya Sharma">
+        </div>
+        <div id="student-fields">
+          <div class="form-row">
+            <div class="field">
+              <label for="student_id">Student ID</label>
+              <input type="text" id="student_id" placeholder="e.g. STU011">
+            </div>
+            <div class="field">
+              <label for="year">Year</label>
+              <select id="year">
+                <option value="">Select year</option>
+                <option value="1">1st Year</option>
+                <option value="2">2nd Year</option>
+                <option value="3">3rd Year</option>
+                <option value="4">4th Year</option>
+                <option value="5">5th Year</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label for="department_id">Department</label>
+            <select id="department_id">
+              <option value="">Loading...</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="phone">Phone</label>
+            <input type="tel" id="phone" required placeholder="10-digit mobile number">
+          </div>
+        </div>
+        <div class="field">
+          <label for="email">Email</label>
+          <input type="email" id="email" required placeholder="you@college.edu">
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label for="password">Password</label>
+            <input type="password" id="password" required minlength="8" placeholder="Min 8 characters">
+          </div>
+          <div class="field">
+            <label for="confirm_password">Confirm password</label>
+            <input type="password" id="confirm_password" required minlength="8" placeholder="Repeat password">
+          </div>
+        </div>
+        <button class="btn btn-block" type="submit" id="submit-btn">Create Account</button>
+      </form>
+      <div class="auth-foot">Already have an account? <a href="/login.html">Log in</a></div>
+    </div>
+  </div>
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      const msg = document.getElementById('form-msg');
+      const sel = document.getElementById('department_id');
+      try {
+        const res = await fetch('/api/auth/register-options').then((r) => r.json());
+        const depts = (res && res.data) || [];
+        sel.innerHTML = '<option value="">Select department</option>' +
+          depts.map((d) => `<option value="${d.id}">${UI.esc(d.code)} - ${UI.esc(d.name)}</option>`).join('');
+      } catch (_e) {
+        sel.innerHTML = '<option value="">Could not load departments</option>';
+      }
+
+      // Role picker
+      const roleInput = document.getElementById('role');
+      const studentFields = document.getElementById('student-fields');
+      document.querySelectorAll('.role-card').forEach((card) => {
+        const pick = () => {
+          document.querySelectorAll('.role-card').forEach((c) => c.classList.remove('selected'));
+          card.classList.add('selected');
+          roleInput.value = card.dataset.role;
+          studentFields.style.display = card.dataset.role === 'STUDENT' ? '' : 'none';
+        };
+        card.addEventListener('click', pick);
+        card.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } });
+      });
+
+      document.getElementById('register-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        msg.innerHTML = '';
+        const btn = document.getElementById('submit-btn');
+        const role = roleInput.value;
+        const payload = {
+          role,
+          full_name: document.getElementById('full_name').value.trim(),
+          student_id: role === 'STUDENT' ? document.getElementById('student_id').value.trim() : '',
+          department_id: document.getElementById('department_id').value || null,
+          year: role === 'STUDENT' ? (document.getElementById('year').value || null) : null,
+          phone: document.getElementById('phone').value.trim(),
+          email: document.getElementById('email').value.trim(),
+          password: document.getElementById('password').value,
+        };
+        const confirm = document.getElementById('confirm_password').value;
+        if (payload.full_name.length < 3) { msg.innerHTML = '<div class="error-box">Please enter your full name.</div>'; return; }
+        if (role === 'STUDENT' && payload.student_id.length < 3) {
+          msg.innerHTML = '<div class="error-box">Student ID is required for student accounts.</div>'; return;
+        }
+        if (!payload.phone) { msg.innerHTML = '<div class="error-box">Phone number is required.</div>'; return; }
+        if (payload.password !== confirm) {
+          msg.innerHTML = '<div class="error-box">Passwords do not match.</div>'; return;
+        }
+        if (payload.password.length < 8) {
+          msg.innerHTML = '<div class="error-box">Password must be at least 8 characters.</div>'; return;
+        }
+        btn.disabled = true; btn.textContent = 'Creating account...';
+        try {
+          const res = await API.post('/auth/register', payload);
+          // Auto-login: server returns token + user for the new account
+          if (res.data && res.data.token) {
+            Auth.save(res.data.user, res.data.token);
+            UI.toast('Welcome to CollegeConnect!', 'success');
+            location.href = Auth.dashboardFor(res.data.user.role);
+          } else {
+            location.href = '/login.html?registered=1';
+          }
+        } catch (err) {
+          msg.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+          btn.disabled = false; btn.textContent = 'Create Account';
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

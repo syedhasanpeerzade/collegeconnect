@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bulk Import - CollegeConnect Admin</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <style>
+    .section { margin-top: 18px; }
+    .type-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+    .type-card {
+      text-align: left; font: inherit; cursor: pointer; padding: 13px 15px;
+      border: 1px solid var(--border, #e2e8f0); border-radius: 12px; background: var(--card, #fff);
+      transition: border-color .15s ease, background .15s ease, transform .15s ease;
+    }
+    .type-card:hover { transform: translateY(-1px); }
+    .type-card.active { border-color: #0f766e; background: #f0fdfa; }
+    .type-card b { display: block; font-size: 14px; }
+    .type-card span { display: block; font-size: 12.5px; color: #64748b; margin-top: 3px; }
+    .imp-meta { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 14px; }
+    .imp-meta label { font-size: 13px; color: #475569; display: flex; flex-direction: column; gap: 4px; }
+    .imp-meta input { padding: 8px 11px; border: 1px solid var(--border, #e2e8f0); border-radius: 8px; font: inherit; min-width: 230px; }
+    .drop { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 12px 0 6px; }
+    .table-wrap { overflow-x: auto; }
+    table.data { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+    table.data th, table.data td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border, #e2e8f0); vertical-align: top; }
+    table.data th { font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; color: #64748b; white-space: nowrap; }
+    .badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+    .badge.green { background: #dcfce7; color: #166534; }
+    .badge.gray  { background: #f1f5f9; color: #475569; }
+    .badge.red   { background: #fee2e2; color: #991b1b; }
+    .badge.amber { background: #fef3c7; color: #92400e; }
+    .row-err { color: #b91c1c; font-size: 12.5px; }
+    .row-note { color: #92400e; font-size: 12.5px; }
+    .muted { color: #64748b; font-size: 12.5px; }
+    .filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 12px 0; }
+    .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin: 12px 0; }
+    .sum { border: 1px solid var(--border, #e2e8f0); border-radius: 10px; padding: 10px 12px; }
+    .sum b { display: block; font-size: 20px; }
+    .sum span { font-size: 12px; color: #64748b; }
+    .actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+  </style>
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="container">
+    <div class="admin-layout">
+      <aside class="side-nav">
+        <a href="/admin/index.html">Dashboard</a>
+        <a href="/admin/users.html">Users</a>
+        <a href="/admin/content.html">Manage Content</a>
+        <a href="/admin/import.html" class="active">Bulk Import</a>
+        <a href="/admin/approvals.html">Event Approvals</a>
+        <a href="/admin/achievements.html">Achievements</a>
+        <a href="/admin/qr.html">College QR Code</a>
+        <a href="/admin/reports.html">Reports</a>
+        <a href="/faculty/complaints.html">Complaints</a>
+        <a href="/announcements.html">Announcements</a>
+      </aside>
+
+      <main>
+        <div class="page-head">
+          <div>
+            <h1>Bulk Import</h1>
+            <div class="sub">Bring in historical college records from a CSV. Records are validated and previewed before anything is written.</div>
+          </div>
+        </div>
+        <div id="msg"></div>
+
+        <!-- 1. Record type -->
+        <div class="card section">
+          <h3 style="margin-top:0">1. What are you importing?</h3>
+          <div class="type-grid" id="type-grid"><div class="loading">Loading import types...</div></div>
+          <div class="imp-meta">
+            <label>Batch source URL (optional)
+              <input id="batch-source" type="url" placeholder="https://college.edu/archive/2023" maxlength="500">
+            </label>
+            <label>Academic year (optional)
+              <input id="batch-year" type="text" placeholder="2023-24" maxlength="12">
+            </label>
+          </div>
+          <p class="muted" style="margin-bottom:0">These are stored on the import batch, not on every row. A row's own Source URL / Academic Year columns win.</p>
+        </div>
+
+        <!-- 2. Template + file -->
+        <div class="card section" id="step2" style="display:none">
+          <h3 style="margin-top:0">2. Download the template, then upload your CSV</h3>
+          <div class="drop">
+            <a class="btn btn-secondary" id="tpl-link" href="#">&#11015; Download CSV template</a>
+            <input type="file" id="csv-file" accept=".csv,text/csv" style="display:none">
+            <button class="btn" id="pick" type="button">Choose CSV file</button>
+            <span class="muted" id="file-name">No file chosen</span>
+          </div>
+          <div class="muted" id="tpl-hint"></div>
+          <p class="muted" id="req-hint" style="margin-bottom:0"></p>
+        </div>
+
+        <!-- 3. Preview -->
+        <div class="card section" id="step3" style="display:none">
+          <h3 style="margin-top:0">3. Preview and choose what to import</h3>
+          <div class="summary-grid" id="preview-summary"></div>
+          <div class="filters">
+            <button class="btn btn-secondary btn-sm" data-filter="all">All rows</button>
+            <button class="btn btn-secondary btn-sm" data-filter="valid">Valid only</button>
+            <button class="btn btn-secondary btn-sm" data-filter="invalid">Invalid</button>
+            <button class="btn btn-secondary btn-sm" data-filter="duplicate">Duplicates</button>
+            <span style="flex:1"></span>
+            <button class="btn btn-secondary btn-sm" id="sel-all">Select all valid</button>
+            <button class="btn btn-secondary btn-sm" id="sel-none">Clear selection</button>
+          </div>
+          <div class="table-wrap">
+            <table class="data">
+              <thead><tr>
+                <th>Import</th><th>Row</th><th>Status</th><th>Title</th><th>Key details</th><th>Problems / notes</th>
+              </tr></thead>
+              <tbody id="preview-body"></tbody>
+            </table>
+          </div>
+          <div class="actions">
+            <button class="btn" id="do-import">Import selected records</button>
+            <span class="muted">Nothing is written to the database until you press this button.</span>
+          </div>
+        </div>
+
+        <!-- 4. Result -->
+        <div class="card section" id="step4" style="display:none">
+          <h3 style="margin-top:0">4. Import summary</h3>
+          <div id="result"></div>
+        </div>
+
+        <!-- History -->
+        <div class="card section">
+          <h3 style="margin-top:0">Import history</h3>
+          <div id="history"><div class="loading">Loading...</div></div>
+        </div>
+      </main>
+    </div>
+  </div>
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      const user = Auth.requireRole(['ADMIN']);
+      if (!user) return;
+
+      const msg = document.getElementById('msg');
+      const TYPE_LABEL = {};
+      let types = [];
+      let currentType = null;
+      let preview = null;   // { type, columns, rows, summary, filename }
+      let filter = 'all';
+
+      const show = (el, on) => { el.style.display = on ? '' : 'none'; };
+      const note = (text, kind) => { msg.innerHTML = text ? `<div class="${kind === 'error' ? 'error-box' : 'card'}" style="margin-bottom:14px">${UI.esc(text)}</div>` : ''; };
+
+      /* ---------------- 1. Types ---------------- */
+      try {
+        const res = await API.get('/admin/import/types');
+        types = res.data || [];
+      } catch (err) {
+        document.getElementById('type-grid').innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        return;
+      }
+      types.forEach((t) => { TYPE_LABEL[t.key] = t.label; });
+      document.getElementById('type-grid').innerHTML = types.map((t) => `
+        <button type="button" class="type-card" data-type="${t.key}">
+          <b>${UI.esc(t.label)}</b>
+          <span>${t.columns.length} columns &middot; ${t.columns.filter((c) => c.required).length} required</span>
+        </button>`).join('');
+      document.getElementById('type-grid').addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-type]');
+        if (btn) selectType(btn.dataset.type);
+      });
+
+      function selectType(key) {
+        currentType = types.find((t) => t.key === key) || null;
+        if (!currentType) return;
+        document.querySelectorAll('.type-card').forEach((c) => c.classList.toggle('active', c.dataset.type === key));
+        show(document.getElementById('step2'), true);
+        show(document.getElementById('step3'), false);
+        show(document.getElementById('step4'), false);
+        preview = null;
+
+        const token = localStorage.getItem('cc_token') || '';
+        document.getElementById('tpl-link').href =
+          `/api/admin/import/template/${encodeURIComponent(key)}?token=${encodeURIComponent(token)}`;
+        document.getElementById('tpl-hint').textContent =
+          `Template: collegeconnect-${key.toLowerCase()}-template.csv (opens in Excel or Google Sheets).`;
+        const req = currentType.columns.filter((c) => c.required).map((c) => c.label);
+        document.getElementById('req-hint').innerHTML =
+          `<b>Required columns:</b> ${req.map((r) => UI.esc(r)).join(', ')}. ` +
+          `Dates must be written as <code>YYYY-MM-DD</code> &mdash; ambiguous dates are rejected rather than guessed. ` +
+          `Blank optional cells stay empty; nothing is invented for you.`;
+        document.getElementById('file-name').textContent = 'No file chosen';
+        document.getElementById('csv-file').value = '';
+      }
+
+      /* ---------------- 2. Upload + preview ---------------- */
+      const fileInput = document.getElementById('csv-file');
+      document.getElementById('pick').addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', async () => {
+        const file = fileInput.files[0];
+        if (!file) return;
+        document.getElementById('file-name').textContent = file.name;
+        note('');
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('type', currentType.key);
+        try {
+          const res = await API.postForm('/admin/import/preview', fd);
+          preview = res.data;
+          // Valid rows start selected; duplicates/invalid ones cannot be selected.
+          preview.rows.forEach((r) => { r.__selected = r.status === 'valid'; });
+          filter = 'all';
+          renderPreview();
+          show(document.getElementById('step3'), true);
+          show(document.getElementById('step4'), false);
+          document.getElementById('step3').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch (err) {
+          note(err.message, 'error');
+          show(document.getElementById('step3'), false);
+        }
+      });
+
+      /* ---------------- 3. Preview table ---------------- */
+      function statusBadge(status) {
+        return {
+          valid: '<span class="badge green">Valid</span>',
+          invalid: '<span class="badge red">Invalid</span>',
+          duplicate: '<span class="badge amber">Possible duplicate</span>',
+        }[status] || `<span class="badge gray">${UI.esc(status)}</span>`;
+      }
+
+      function keyDetails(parsed, status, rawValues) {
+        const v = (rawValues || {});
+        if (currentType.key === 'ANNOUNCEMENTS') {
+          return [v.category, v.published_at && `Published ${v.published_at}`, v.audience].filter(Boolean).map(UI.esc).join(' &middot; ');
+        }
+        if (currentType.key === 'ACHIEVEMENTS') {
+          return [v.competition_name, v.position, v.achievement_year, v.event_date].filter(Boolean).map(UI.esc).join(' &middot; ');
+        }
+        return [v.category, v.event_date, v.venue, v.source_url && 'has source'].filter(Boolean).map(UI.esc).join(' &middot; ');
+      }
+
+      function rowTitle(rawValues) { return (rawValues || {}).title || '(no title)'; }
+
+      function renderPreview() {
+        const rows = preview.rows;
+        const s = preview.summary;
+        document.getElementById('preview-summary').innerHTML = [
+          ['Rows read', s.total, ''],
+          ['Valid', s.valid, 'green'],
+          ['Invalid', s.invalid, 'red'],
+          ['Possibly duplicate', s.duplicate, 'amber'],
+        ].map(([label, n]) => `<div class="sum"><b>${n}</b><span>${label}</span></div>`).join('');
+
+        const visible = rows.filter((r) => filter === 'all' || r.status === filter);
+        document.getElementById('preview-body').innerHTML = visible.length ? visible.map((r) => `
+          <tr data-row="${r.row_number}">
+            <td>${r.status === 'valid'
+              ? `<input type="checkbox" data-check="${r.row_number}"${r.__selected ? ' checked' : ''}>`
+              : `<input type="checkbox" disabled title="${r.status === 'duplicate' ? 'Already exists or repeats earlier in this file' : 'Fix the errors to import this row'}">`}</td>
+            <td>${r.row_number}</td>
+            <td>${statusBadge(r.status)}</td>
+            <td>${UI.esc(rowTitle(r.values))}</td>
+            <td>${keyDetails(r.parsed, r.status, r.values)}</td>
+            <td>
+              ${r.errors.length ? `<div class="row-err">${r.errors.map((e) => '&#9888; ' + UI.esc(e)).join('<br>')}</div>` : ''}
+              ${r.notes.length ? `<div class="row-note">${r.notes.map((n) => '&#8505; ' + UI.esc(n)).join('<br>')}</div>` : ''}
+              ${!r.errors.length && !r.notes.length ? '<span class="muted">&mdash;</span>' : ''}
+            </td>
+          </tr>`).join('') : `<tr><td colspan="6" class="muted">No rows match this filter.</td></tr>`;
+
+      }
+
+      // One delegated listener (bound once) keeps the model in sync, so the
+      // selection survives switching between the status filters.
+      document.getElementById('preview-body').addEventListener('change', (e) => {
+        const cb = e.target.closest('[data-check]');
+        if (!cb) return;
+        const row = preview.rows.find((r) => r.row_number === Number(cb.dataset.check));
+        if (row) row.__selected = cb.checked;
+      });
+
+      document.querySelectorAll('[data-filter]').forEach((b) => {
+        b.addEventListener('click', () => { filter = b.dataset.filter; renderPreview(); });
+      });
+      document.getElementById('sel-all').addEventListener('click', () => {
+        preview.rows.forEach((r) => { if (r.status === 'valid') r.__selected = true; });
+        renderPreview();
+      });
+      document.getElementById('sel-none').addEventListener('click', () => {
+        preview.rows.forEach((r) => { r.__selected = false; });
+        renderPreview();
+      });
+
+      /* ---------------- 4. Import ---------------- */
+      document.getElementById('do-import').addEventListener('click', async () => {
+        const btn = document.getElementById('do-import');
+        if (!preview) return;
+        // Read the live checkbox state (the table may be filtered).
+        const rows = preview.rows.map((r) => ({
+          row_number: r.row_number,
+          selected: r.__selected === true,   // anything not selected is reported as skipped
+          values: r.values,
+        }));
+        const selectedCount = rows.filter((r) => r.selected).length;
+        if (!selectedCount) { note('Select at least one valid row to import.', 'error'); return; }
+
+        const okd = await UI.confirm(
+          `Import ${selectedCount} record(s) as official college records? Invalid and duplicate rows are reported, not imported.`,
+          { title: 'Confirm import', confirmText: 'Import' }
+        );
+        if (!okd) return;
+
+        btn.disabled = true; btn.textContent = 'Importing...';
+        try {
+          const res = await API.post('/admin/import/commit', {
+            type: preview.type,
+            filename: preview.filename,
+            sourceUrl: document.getElementById('batch-source').value.trim(),
+            academicYear: document.getElementById('batch-year').value.trim(),
+            rows,
+          });
+          renderResult(res.data);
+          show(document.getElementById('step3'), false);
+          show(document.getElementById('step4'), true);
+          document.getElementById('step4').scrollIntoView({ behavior: 'smooth', block: 'start' });
+          loadHistory();
+        } catch (err) {
+          note(err.message, 'error');
+        }
+        btn.disabled = false; btn.textContent = 'Import selected records';
+      });
+
+      const WHERE_TO_LOOK = {
+        EVENTS: ['Events archive', '/events.html#archive'],
+        WORKSHOPS: ['Events archive', '/events.html#archive'],
+        FESTS: ['Events archive', '/events.html#archive'],
+        ANNOUNCEMENTS: ['Announcements', '/announcements.html'],
+        ACHIEVEMENTS: ['Hall of Fame', '/achievements.html'],
+      };
+
+      const OUTCOME = {
+        skipped: ['gray', 'Not selected'],
+        duplicate: ['amber', 'Already existed'],
+        failed: ['red', 'Failed validation'],
+      };
+
+      function renderResult(s) {
+        const [whereLabel, whereHref] = WHERE_TO_LOOK[s.type] || ['the site', '/'];
+        // Account for EVERY row in the file: nothing is silently dropped.
+        const byRow = new Map((preview ? preview.rows : []).map((r) => [r.row_number, r]));
+        const notImported = (s.results || []).filter((r) => r.outcome !== 'imported').map((r) => {
+          const src = byRow.get(r.row_number);
+          // The server only knows a row was not submitted; the preview knows WHY
+          // it could not be (duplicate / invalid), which is the useful reason.
+          let outcome = r.outcome;
+          if (outcome === 'skipped' && src && src.status === 'duplicate') outcome = 'duplicate';
+          if (outcome === 'skipped' && src && src.status === 'invalid') outcome = 'failed';
+          const why = (src && src.errors && src.errors.length)
+            ? src.errors
+            : (outcome === 'duplicate' && src && src.notes.length ? src.notes : [r.message || 'Not imported']);
+          const [cls, label] = OUTCOME[outcome] || ['gray', outcome];
+          return { row_number: r.row_number, cls, label, why };
+        });
+        document.getElementById('result').innerHTML = `
+          <div class="summary-grid">
+            <div class="sum"><b>${s.imported}</b><span>Imported</span></div>
+            <div class="sum"><b>${s.duplicates}</b><span>Already existed</span></div>
+            <div class="sum"><b>${s.skipped}</b><span>Not selected</span></div>
+            <div class="sum"><b>${s.failed}</b><span>Failed validation</span></div>
+            <div class="sum"><b>${s.total}</b><span>Rows in file</span></div>
+          </div>
+          <p>Batch <b>${UI.esc(s.batch_ref || '')}</b> &middot; ${UI.esc(s.label)}. Imported records are live now &mdash;
+             see them under <a href="${whereHref}">${UI.esc(whereLabel)}</a>.</p>
+          ${notImported.length ? `
+            <h4>Records that were <u>not</u> imported</h4>
+            <div class="table-wrap"><table class="data">
+              <thead><tr><th>Row</th><th>Outcome</th><th>Reason</th></tr></thead>
+              <tbody>${notImported.map((f) => `<tr>
+                <td>${f.row_number}</td>
+                <td><span class="badge ${f.cls}">${f.label}</span></td>
+                <td class="row-err">${f.why.map(UI.esc).join('<br>')}</td>
+              </tr>`).join('')}</tbody>
+            </table></div>` : '<p class="muted">Every row in the file was imported.</p>'}
+        `;
+      }
+
+      /* ---------------- History ---------------- */
+      async function loadHistory() {
+        const box = document.getElementById('history');
+        try {
+          const res = await API.get('/admin/import/history?limit=15');
+          const rows = res.data || [];
+          if (!rows.length) { box.innerHTML = UI.empty('No imports yet', 'Your first bulk import will be listed here.'); return; }
+          box.innerHTML = `<div class="table-wrap"><table class="data">
+            <thead><tr><th>Batch</th><th>Type</th><th>File</th><th>Imported</th><th>Duplicate</th><th>Skipped</th><th>Failed</th><th>By</th><th>When</th></tr></thead>
+            <tbody>${rows.map((b) => `<tr>
+              <td>${UI.esc(b.batch_ref)}</td>
+              <td>${UI.esc(TYPE_LABEL[b.record_type] || b.record_type)}</td>
+              <td>${UI.esc(b.source_filename || '-')}${b.source_url ? `<div class="muted"><a href="${UI.esc(b.source_url)}" target="_blank" rel="noopener">source</a></div>` : ''}</td>
+              <td><b>${b.imported_rows}</b> / ${b.total_rows}</td>
+              <td>${b.duplicate_rows}</td>
+              <td>${b.skipped_rows}</td>
+              <td>${b.failed_rows ? `<span class="badge red">${b.failed_rows}</span>` : '0'}</td>
+              <td>${UI.esc(b.imported_by_name || '-')}</td>
+              <td>${UI.fmtDateTime(b.created_at)}</td>
+            </tr>`).join('')}</tbody>
+          </table></div>`;
+        } catch (err) {
+          box.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        }
+      }
+
+      await loadHistory();
+    })();
+  </script>
+</body>
+</html>

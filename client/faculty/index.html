@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Faculty Dashboard - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="container">
+    <div class="page-head">
+      <div><h1>Faculty Workspace</h1><div class="sub">Review event proposals, complaints and achievements.</div></div>
+    </div>
+    <div id="stat-cards" class="grid grid-4" style="margin-bottom:22px"></div>
+
+    <div class="grid grid-3">
+      <div class="card">
+        <h3>Event requests</h3>
+        <p style="font-size:14px;color:var(--ink-soft)">Approve, reject or request changes to proposed events. Approved events publish automatically.</p>
+        <a class="btn btn-sm" href="/faculty/approvals.html">Review queue</a>
+      </div>
+      <div class="card">
+        <h3>Complaints</h3>
+        <p style="font-size:14px;color:var(--ink-soft)">Assign, update and resolve student complaints.</p>
+        <a class="btn btn-sm" href="/faculty/complaints.html">Open complaints</a>
+      </div>
+      <div class="card">
+        <h3>Achievements</h3>
+        <p style="font-size:14px;color:var(--ink-soft)">Verify submitted achievements for the Hall of Fame.</p>
+        <a class="btn btn-sm" href="/faculty/achievements.html">Verify</a>
+      </div>
+    </div>
+
+    <div class="section card">
+      <h3>All published events</h3>
+      <div id="events-mini"><div class="loading">Loading...</div></div>
+    </div>
+  </div>
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      const user = Auth.requireRole(['FACULTY', 'ADMIN']);
+      if (!user) return;
+      try {
+        const res = await API.get('/admin/dashboard/faculty');
+        const d = res.data;
+        document.getElementById('stat-cards').innerHTML = [
+          ['Pending Event Requests', d.pending_event_requests, '/faculty/approvals.html'],
+          ['Pending Complaints', d.pending_complaints, '/faculty/complaints.html'],
+          ['Achievements to Verify', d.pending_achievements, '/faculty/achievements.html'],
+          ['Approved Requests', d.approved_requests, '/faculty/approvals.html'],
+        ].map(([label, v]) => `
+          <div class="card stat-card">
+            <span class="stat-label">${label}</span>
+            <span class="stat-value">${v}</span>
+          </div>`).join('');
+
+        const evRes = await API.get('/events?sort=date_asc');
+        const rows = (evRes.data.events || []).slice(0, 8);
+        document.getElementById('events-mini').innerHTML = rows.length ? `
+          <div class="table-wrap"><table>
+            <thead><tr><th>Event</th><th>Date</th><th>Venue</th><th>Registered</th></tr></thead>
+            <tbody>${rows.map((e) => `
+              <tr>
+                <td data-label="Event"><a href="/event-details.html?id=${e.id}">${UI.esc(e.title)}</a></td>
+                <td data-label="Date">${UI.fmtDate(e.event_date)}</td>
+                <td data-label="Venue">${UI.esc(e.venue)}</td>
+                <td data-label="Reg">${e.registration_count}/${e.max_participants}</td>
+              </tr>`).join('')}</tbody></table></div>`
+          : UI.empty('No events published yet');
+      } catch (err) {
+        document.getElementById('stat-cards').innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+      }
+    })();
+  </script>
+</body>
+</html>

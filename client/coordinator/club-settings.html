@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Club Settings - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="container-narrow">
+    <div class="page-head">
+      <div><h1>Club Settings</h1><div class="sub">Update your club's public information and application questions.</div></div>
+      <a class="btn btn-secondary" href="/coordinator/index.html">Back</a>
+    </div>
+    <div id="content"><div class="loading">Loading...</div></div>
+  </div>
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      const user = Auth.requireRole(['CLUB_COORDINATOR', 'ADMIN', 'FACULTY']);
+      if (!user) return;
+      const box = document.getElementById('content');
+      const clubId = new URLSearchParams(location.search).get('club');
+      if (!clubId) { box.innerHTML = UI.empty('Select a club from the coordinator dashboard first'); return; }
+
+      let club;
+      try {
+        const res = await API.get(`/clubs/${clubId}`);
+        club = res.data;
+      } catch (err) { box.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`; return; }
+
+      box.innerHTML = `
+        <h2 style="font-size:17px">${UI.esc(club.name)}</h2>
+        <form id="info-form" class="card form-grid" novalidate>
+          <fieldset>
+            <legend>Public information</legend>
+            <div class="field"><label for="f-desc">Description</label><textarea id="f-desc" required>${UI.esc(club.description)}</textarea></div>
+            <div class="field" style="margin-top:12px"><label for="f-obj">Objectives</label><textarea id="f-obj" style="min-height:70px">${UI.esc(club.objectives || '')}</textarea></div>
+            <div class="field" style="margin-top:12px"><label for="f-act">Activities</label><textarea id="f-act" style="min-height:70px">${UI.esc(club.activities || '')}</textarea></div>
+            <div class="field" style="margin-top:12px"><label for="f-elig">Eligibility</label><input id="f-elig" value="${UI.esc(club.eligibility || '')}"></div>
+          </fieldset>
+          <button class="btn" type="submit">Save Changes</button>
+        </form>
+
+        <div class="section">
+          <h2>Application questions</h2>
+          <div id="questions">
+            ${(club.custom_questions || []).length ? club.custom_questions.map((q) => `
+              <div class="card" style="margin-bottom:10px;display:flex;justify-content:space-between;gap:10px;align-items:center">
+                <div>
+                  <b>${UI.esc(q.question)}</b><br>
+                  <span style="font-size:12.5px;color:var(--muted)">${UI.categoryLabel(q.field_type)} &middot; ${q.is_required ? 'Required' : 'Optional'}</span>
+                </div>
+                <button class="btn btn-sm btn-danger" data-delq="${q.id}">Delete</button>
+              </div>`).join('')
+              : '<p style="color:var(--muted)">No custom questions yet. Students answer these during application.</p>'}
+          </div>
+          <div class="card form-grid" style="margin-top:14px">
+            <h3 style="margin:0">Add a question</h3>
+            <div class="field"><label for="q-text">Question</label><input id="q-text" placeholder="e.g. Which instruments do you play?"></div>
+            <div class="form-row">
+              <div class="field">
+                <label for="q-type">Type</label>
+                <select id="q-type"><option>TEXT</option><option>TEXTAREA</option><option>SELECT</option></select>
+              </div>
+              <div class="field"><label for="q-options">Options <span class="hint">(for SELECT, comma separated)</span></label><input id="q-options"></div>
+            </div>
+            <label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="q-required" checked style="width:auto"> Required</label>
+            <button class="btn" id="add-q" type="button">Add Question</button>
+          </div>
+        </div>`;
+
+      document.getElementById('info-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        try {
+          const res = await API.put(`/clubs/${clubId}`, {
+            description: document.getElementById('f-desc').value.trim(),
+            objectives: document.getElementById('f-obj').value.trim(),
+            activities: document.getElementById('f-act').value.trim(),
+            eligibility: document.getElementById('f-elig').value.trim(),
+          });
+          UI.toast(res.message, 'success');
+        } catch (err) { UI.toast(err.message, 'error'); }
+      });
+
+      document.getElementById('add-q').addEventListener('click', async () => {
+        const type = document.getElementById('q-type').value;
+        try {
+          await API.post(`/clubs/${clubId}/questions`, {
+            question: document.getElementById('q-text').value.trim(),
+            field_type: type,
+            options: document.getElementById('q-options').value.trim(),
+            is_required: document.getElementById('q-required').checked,
+          });
+          UI.toast('Question added', 'success');
+          setTimeout(() => location.reload(), 700);
+        } catch (err) { UI.toast(err.message, 'error'); }
+      });
+
+      box.querySelectorAll('[data-delq]').forEach((b) => {
+        b.addEventListener('click', async () => {
+          if (!(await UI.confirm('Delete this question?', { confirmText: 'Delete' }))) return;
+          try {
+            await API.del(`/clubs/${clubId}/questions/${b.dataset.delq}`);
+            UI.toast('Question removed', 'success');
+            setTimeout(() => location.reload(), 700);
+          } catch (err) { UI.toast(err.message, 'error'); }
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

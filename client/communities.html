@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Communities - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/social.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+
+  <div class="social-shell">
+    <aside class="social-sidebar"><nav class="snav" id="snav"></nav></aside>
+
+    <main>
+      <div class="feed-hero">
+        <h1>Communities</h1>
+        <p>Find your people — departments, years, and interests.</p>
+      </div>
+      <div id="communities"><div class="loading">Loading communities...</div></div>
+    </main>
+
+    <aside class="social-rail">
+      <div class="card rail-card" style="font-size:12.5px;color:var(--muted)">
+        Communities are open to everyone. Join to post, react, and keep up with what matters to you.
+      </div>
+    </aside>
+  </div>
+
+  <nav class="mobile-tabbar" id="tabbar"></nav>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/social.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      Social.chrome('/communities.html');
+      const user = Auth.user();
+      const box = document.getElementById('communities');
+
+      async function load() {
+        try {
+          const res = await API.get('/social/communities');
+          const rows = res.data || [];
+          if (!rows.length) { box.innerHTML = UI.empty('No communities yet'); return; }
+          box.innerHTML = `<div class="grid grid-2">${rows.map((c) => `
+            <div class="card" style="padding:16px;margin-bottom:14px">
+              <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
+                <div>
+                  <a href="/community.html?slug=${UI.esc(c.slug)}" style="font-weight:800;font-size:16px">#${UI.esc(c.name)}</a>
+                  <div style="font-size:13px;color:var(--muted);margin-top:2px">${c.member_count} members · ${c.post_count} posts</div>
+                </div>
+                ${user ? `<button class="btn btn-sm ${c.joined ? 'btn-secondary' : ''}" data-join="${c.id}" data-state="${c.joined ? '1' : ''}">${c.joined ? 'Joined &#10003;' : 'Join'}</button>` : `<a class="btn btn-sm" href="/login.html?next=${encodeURIComponent('/community.html?slug=' + c.slug)}">Join</a>`}
+              </div>
+              <p style="font-size:13.5px;color:var(--ink-soft);margin:10px 0 0">${UI.esc(c.description || '')}</p>
+              <div style="margin-top:10px"><a class="btn btn-sm btn-secondary" href="/community.html?slug=${UI.esc(c.slug)}">Open community</a></div>
+            </div>`).join('')}</div>`;
+
+          box.addEventListener('click', async (e) => {
+            const btn = e.target.closest('[data-join]');
+            if (!btn) return;
+            if (!Auth.user()) { location.href = '/login.html?next=%2Fcommunities.html'; return; }
+            btn.disabled = true;
+            try {
+              const r = await API.put(`/social/communities/${btn.dataset.join}/join`);
+              btn.dataset.state = r.data.joined ? '1' : '';
+              btn.classList.toggle('btn-secondary', r.data.joined);
+              btn.innerHTML = r.data.joined ? 'Joined &#10003;' : 'Join';
+              UI.toast(r.message, 'success');
+            } catch (err) { UI.toast(err.message, 'error'); }
+            btn.disabled = false;
+          });
+        } catch (err) {
+          box.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        }
+      }
+      load();
+    })();
+  </script>
+</body>
+</html>

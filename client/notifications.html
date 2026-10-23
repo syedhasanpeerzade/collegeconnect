@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Notifications - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/social.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+
+  <div class="social-shell">
+    <aside class="social-sidebar"><nav class="snav" id="snav"></nav></aside>
+
+    <main>
+      <div class="feed-hero">
+        <div>
+          <h1>Notifications</h1>
+          <p>Everything that needs your attention.</p>
+        </div>
+        <button class="btn btn-secondary btn-sm" id="read-all">Mark all as read</button>
+      </div>
+      <div class="card" id="content"><div class="loading">Loading...</div></div>
+    </main>
+
+    <aside class="social-rail">
+      <div class="card rail-card" style="font-size:12.5px;color:var(--muted)">
+        Notifications cover likes, comments, follows, event reminders and official announcements.
+        Open <a href="/profile.html">your profile</a> to tune what you receive.
+      </div>
+    </aside>
+  </div>
+
+  <nav class="mobile-tabbar" id="tabbar"></nav>
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/social.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      Social.chrome('/notifications.html');
+      const user = Auth.requireRole(['STUDENT', 'ORGANIZER', 'CLUB_COORDINATOR', 'FACULTY', 'ADMIN']);
+      if (!user) return;
+      const box = document.getElementById('content');
+
+      async function load() {
+        box.innerHTML = UI.loadingBox('Loading notifications...');
+        try {
+          const res = await API.get('/notifications');
+          const rows = res.data || [];
+          if (!rows.length) { box.innerHTML = UI.empty('No notifications yet'); return; }
+          box.innerHTML = rows.map((n) => `
+            <div class="notif-item ${n.priority ? 'priority' : ''} ${n.is_read ? '' : 'unread'}" style="align-items:flex-start">
+              <span class="p-dot" title="${n.priority ? 'Matches your interests' : 'General notification'}"></span>
+              <div style="flex:1">
+                <div class="n-title">${UI.esc(n.title)}${n.priority ? '<span class="p-badge">PRIORITY</span>' : ''}</div>
+                <div class="n-msg" style="white-space:pre-line">${UI.esc(n.message)}</div>
+                ${n.priority && n.related_type === 'EVENT' && n.related_id ? `
+                  <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+                    <a class="btn btn-sm btn-secondary" href="/event-details.html?id=${n.related_id}">View Event</a>
+                    <button class="btn btn-sm ec-register" data-event-id="${n.related_id}" data-nid="${n.id}">Register Now</button>
+                  </div>`
+                : n.link ? `<a href="${UI.esc(n.link)}" style="font-size:13px" data-nid="${n.id}" data-unread="${n.is_read ? 0 : 1}">Open</a>` : ''}
+              </div>
+              <div style="text-align:right">
+                <div class="n-time">${UI.timeAgo(n.created_at)}</div>
+                ${!n.is_read ? `<button class="btn btn-ghost btn-sm" style="margin-top:6px" data-read="${n.id}">Mark as read</button>` : ''}
+              </div>
+            </div>`).join('');
+
+          // Mark individual notifications as read
+          box.querySelectorAll('button[data-read]').forEach((b) => {
+            b.addEventListener('click', async () => {
+              try {
+                await API.put(`/notifications/${b.dataset.read}/read`);
+                b.closest('.notif-item').classList.remove('unread');
+                b.remove();
+                UI.toast('Marked as read', 'success');
+              } catch (err) { UI.toast(err.message, 'error'); }
+            });
+          });
+
+          // One-click register from a priority notification
+          UI.bindRegisterButtons(box, () => {});
+          box.querySelectorAll('.ec-register[data-nid]').forEach((b) => {
+            const nid = b.dataset.nid;
+            b.addEventListener('click', () => {
+              API.put(`/notifications/${nid}/read`).catch(() => {});
+            });
+          });
+
+          box.querySelectorAll('a[data-nid]').forEach((a) => {
+            a.addEventListener('click', () => {
+              if (a.dataset.unread === '1') API.put(`/notifications/${a.dataset.nid}/read`).catch(() => {});
+            });
+          });
+        } catch (err) {
+          box.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        }
+      }
+
+      document.getElementById('read-all').addEventListener('click', async () => {
+        try {
+          await API.put('/notifications/read-all');
+          UI.toast('All notifications marked as read', 'success');
+          load();
+        } catch (err) { UI.toast(err.message, 'error'); }
+      });
+
+      load();
+    })();
+  </script>
+</body>
+</html>

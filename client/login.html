@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <h1>Welcome back</h1>
+      <p class="lead">Log in to your CollegeConnect account.</p>
+      <div id="form-msg"></div>
+      <form id="login-form" class="form-grid" novalidate>
+        <div class="field">
+          <label for="email">Email</label>
+          <input type="email" id="email" name="email" required autocomplete="email" placeholder="you@college.edu">
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" required autocomplete="current-password" placeholder="Your password">
+        </div>
+        <button class="btn btn-block" type="submit" id="submit-btn">Log In</button>
+      </form>
+      <div class="auth-foot">
+        <a href="/forgot-password.html">Forgot password?</a> &middot;
+        New student? <a href="/register.html">Create an account</a>
+      </div>
+      <div class="demo-accounts">
+        <b>Accounts</b> (password: <code>Password@123</code>)<br>
+        Admin: <code>admin@collegeconnect.com</code><br>
+        Faculty (Event Coordinator): <code>faculty@collegeconnect.com</code><br>
+        Organizer: <code>organizer@collegeconnect.com</code><br>
+        Student: <code>student@collegeconnect.com</code>
+      </div>
+    </div>
+  </div>
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (function () {
+      // Already logged in? Send to the right dashboard.
+      const existing = Auth.user();
+      if (existing) { location.replace(Auth.dashboardFor(existing.role)); return; }
+
+      const params = new URLSearchParams(location.search);
+      const msg = document.getElementById('form-msg');
+      if (params.get('expired')) msg.innerHTML = '<div class="error-box">Your session expired. Please log in again.</div>';
+      if (params.get('registered')) msg.innerHTML = '<div class="ok-box">Registration successful. Please log in.</div>';
+      if (params.get('reset')) msg.innerHTML = '<div class="ok-box">Password reset successful. Please log in with your new password.</div>';
+
+      document.getElementById('login-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        msg.innerHTML = '';
+        const btn = document.getElementById('submit-btn');
+        const email = document.getElementById('email').value.trim();
+        const password = document.getElementById('password').value;
+        if (!email || !password) { msg.innerHTML = '<div class="error-box">Please enter your email and password.</div>'; return; }
+        btn.disabled = true; btn.textContent = 'Logging in...';
+        try {
+          const res = await API.post('/auth/login', { email, password });
+          Auth.save(res.data.user, res.data.token);
+          UI.toast('Login successful', 'success');
+          const next = params.get('next');
+          // Students land on the social Feed by default (every login); the
+          // Dashboard stays one click away in the nav. Explicit ?next= links
+          // (e.g. "login to register") still win.
+          const defaultHome = res.data.user.role === 'STUDENT' ? '/feed.html' : Auth.dashboardFor(res.data.user.role);
+          const target = next && next.startsWith('/') ? next : defaultHome;
+          // First student login -> interest onboarding (once ever; skippable)
+          if (res.data.user.role === 'STUDENT') {
+            try {
+              const st = await API.get('/interests/status');
+              if (st.data && st.data.interests_configured === false) {
+                location.href = `/onboarding.html?next=${encodeURIComponent(target)}`;
+                return;
+              }
+            } catch (_e) { /* status check is best-effort */ }
+          }
+          location.href = target;
+        } catch (err) {
+          msg.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+          btn.disabled = false; btn.textContent = 'Log In';
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

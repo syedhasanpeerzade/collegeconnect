@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Achievement Management - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="container">
+    <div class="admin-layout">
+      <aside class="side-nav">
+        <a href="/admin/index.html">Dashboard</a>
+        <a href="/admin/users.html">Users</a>
+        <a href="/admin/content.html">Manage Content</a>
+        <a href="/admin/import.html">Bulk Import</a>
+        <a href="/admin/approvals.html">Event Approvals</a>
+        <a href="/admin/achievements.html" class="active">Achievements</a>
+        <a href="/admin/qr.html">College QR Code</a>
+        <a href="/admin/reports.html">Reports</a>
+        <a href="/faculty/complaints.html">Complaints</a>
+        <a href="/announcements.html">Announcements</a>
+      </aside>
+      <main>
+        <div class="page-head">
+          <div><h1>Achievement Management</h1><div class="sub">All records including unverified and archived. Manage winners and photos here.</div></div>
+          <a class="btn" href="/achievements.html">Submit new achievement</a>
+        </div>
+        <div id="content"><div class="loading">Loading...</div></div>
+      </main>
+    </div>
+  </div>
+
+  <!-- ============ Add / Edit Winner modal ============ -->
+  <div class="modal-overlay" id="winner-modal" style="display:none">
+    <div class="modal" style="max-width:560px;max-height:90vh;overflow:auto">
+      <h3 id="winner-modal-title">Add Winner</h3>
+      <p class="hint" id="winner-modal-sub"></p>
+      <form id="winner-form" class="form-grid" novalidate>
+        <div class="form-row">
+          <div class="field">
+            <label for="w-name">Winner name</label>
+            <input id="w-name" placeholder="e.g. Priya Nair">
+          </div>
+          <div class="field">
+            <label for="w-team">Team name <span class="hint">(if a team)</span></label>
+            <input id="w-team" placeholder="e.g. Team Innovators">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label for="w-position">Award / position</label>
+            <select id="w-position">
+              <option value="">-- select --</option>
+              <option value="WINNER">Winner</option>
+              <option value="1ST_PLACE">First Place</option>
+              <option value="2ND_PLACE">Runner-up (Second)</option>
+              <option value="3RD_PLACE">Third Place</option>
+              <option value="FINALIST">Finalist</option>
+              <option value="PARTICIPATION">Participation</option>
+              <option value="OTHER">Other</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="w-photo">Winner photo <span class="hint">(optional)</span></label>
+            <input type="file" id="w-photo" accept="image/jpeg,image/png,image/webp,image/gif">
+          </div>
+        </div>
+        <div class="field">
+          <label>Additional photos <span class="hint">(optional - for team achievements)</span></label>
+          <input type="file" id="w-photos" accept="image/jpeg,image/png,image/webp,image/gif" multiple>
+          <div class="upload-previews" id="w-photos-prev"></div>
+          <div class="upload-hint" id="w-photos-hint"></div>
+        </div>
+        <div class="field">
+          <label for="w-desc">Short description <span class="hint">(optional)</span></label>
+          <textarea id="w-desc" style="min-height:60px" placeholder="e.g. Won the inter-college hackathon final round"></textarea>
+        </div>
+        <div id="winner-msg"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" data-close-winner>Cancel</button>
+          <button type="submit" class="btn" id="winner-save">Save winner</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============ Photo manager modal ============ -->
+  <div class="modal-overlay" id="photo-modal" style="display:none">
+    <div class="modal" style="max-width:640px;max-height:90vh;overflow:auto">
+      <h3>Manage Photos</h3>
+      <p class="hint" id="photo-modal-sub"></p>
+
+      <div class="field">
+        <label>Add photos <span class="hint">(JPEG, PNG, WebP, GIF - up to 5 MB each)</span></label>
+        <input type="file" id="pm-input" accept="image/jpeg,image/png,image/webp,image/gif" multiple>
+        <div class="upload-previews" id="pm-prev"></div>
+        <div class="upload-hint" id="pm-hint"></div>
+        <button class="btn btn-sm" id="pm-upload" style="margin-top:10px" disabled>Upload selected</button>
+      </div>
+
+      <h4 style="margin:18px 0 4px">Current photos</h4>
+      <div id="pm-list"><div class="loading">Loading photos...</div></div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" data-close-photo>Close</button>
+      </div>
+    </div>
+  </div>
+
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      const user = Auth.requireRole(['ADMIN']);
+      if (!user) return;
+      const box = document.getElementById('content');
+
+      const winnerModal = document.getElementById('winner-modal');
+      const photoModal = document.getElementById('photo-modal');
+
+      // ---- Add/Edit winner state ----
+      let winnerTarget = null;         // achievement the winner belongs to
+      let editingWinnerId = null;      // winner id when editing
+      const winnerPhotoPicker = UI.bindPhotoPicker(
+        document.getElementById('w-photos'),
+        document.getElementById('w-photos-prev'),
+        document.getElementById('w-photos-hint'),
+        { max: 6, maxMB: 5 },
+      );
+
+      function openWinnerModal(ach, winner) {
+        winnerTarget = ach;
+        editingWinnerId = winner ? winner.id : null;
+        document.getElementById('winner-modal-title').textContent = winner ? 'Edit Winner' : 'Add Winner';
+        document.getElementById('winner-modal-sub').textContent = `${ach.title} (${ach.public_id})`;
+        document.getElementById('w-name').value = winner ? (winner.winner_name || '') : '';
+        document.getElementById('w-team').value = winner ? (winner.team_name || '') : '';
+        document.getElementById('w-position').value = winner ? (winner.position || '') : '';
+        document.getElementById('w-desc').value = winner ? (winner.description || '') : '';
+        document.getElementById('winner-msg').innerHTML = '';
+        winnerPhotoPicker.reset();
+        winnerModal.style.display = 'flex';
+      }
+      document.querySelectorAll('[data-close-winner]').forEach((b) =>
+        b.addEventListener('click', () => { winnerModal.style.display = 'none'; }));
+      winnerModal.addEventListener('click', (e) => { if (e.target === winnerModal) winnerModal.style.display = 'none'; });
+
+      document.getElementById('winner-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const msg = document.getElementById('winner-msg');
+        msg.innerHTML = '';
+        const name = document.getElementById('w-name').value.trim();
+        const team = document.getElementById('w-team').value.trim();
+        if (!name && !team) { msg.innerHTML = '<div class="error-box">Enter a winner name or a team name.</div>'; return; }
+        const saveBtn = document.getElementById('winner-save');
+        saveBtn.disabled = true;
+        try {
+          let winnerId = editingWinnerId;
+          if (editingWinnerId) {
+            // Update the existing winner's fields (name/team/award/description).
+            await API.put(`/achievements/${winnerTarget.id}/winners/${editingWinnerId}`, {
+              winner_name: name || null, team_name: team || null,
+              position: document.getElementById('w-position').value || null,
+              description: document.getElementById('w-desc').value.trim() || null,
+              role: team && !name ? 'TEAM' : 'INDIVIDUAL',
+            });
+          } else {
+            const res = await API.post(`/achievements/${winnerTarget.id}/winners`, {
+              winner_name: name || null, team_name: team || null,
+              position: document.getElementById('w-position').value || null,
+              description: document.getElementById('w-desc').value.trim() || null,
+              role: team && !name ? 'TEAM' : 'INDIVIDUAL',
+            });
+            winnerId = res.data && res.data.id;
+          }
+          // Upload winner photo (first) + additional photos to the gallery.
+          const extra = winnerPhotoPicker.getFiles();
+          const single = document.getElementById('w-photo').files[0];
+          const all = (single ? [single] : []).concat(extra);
+          if (all.length) {
+            const fd = new FormData();
+            all.forEach((f) => fd.append('media', f));
+            await API.postForm(`/achievements/${winnerTarget.id}/photos`, fd);
+          }
+          UI.toast(editingWinnerId ? 'Winner updated' : 'Winner added', 'success');
+          winnerModal.style.display = 'none';
+          load();
+        } catch (err) {
+          msg.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        } finally {
+          saveBtn.disabled = false;
+        }
+      });
+
+      // ---- Photo manager state ----
+      let photoTarget = null;
+      const pmPicker = UI.bindPhotoPicker(
+        document.getElementById('pm-input'),
+        document.getElementById('pm-prev'),
+        document.getElementById('pm-hint'),
+        { max: 8, maxMB: 5 },
+      );
+      const pmUploadBtn = document.getElementById('pm-upload');
+      pmUploadBtn.addEventListener('click', async () => {
+        const files = pmPicker.getFiles();
+        if (!files.length) return;
+        pmUploadBtn.disabled = true;
+        try {
+          const fd = new FormData();
+          files.forEach((f) => fd.append('media', f));
+          await API.postForm(`/achievements/${photoTarget.id}/photos`, fd);
+          UI.toast('Photos uploaded', 'success');
+          pmPicker.reset();
+          loadPhotoList();
+          load();
+        } catch (err) { UI.toast(err.message, 'error'); }
+        finally { pmUploadBtn.disabled = pmPicker.getFiles().length === 0; }
+      });
+      // Keep the upload button enabled only when files are selected.
+      const _origGet = pmPicker.getFiles;
+      pmPicker.getFiles = function () { const f = _origGet(); pmUploadBtn.disabled = f.length === 0; return f; };
+      document.getElementById('pm-input').addEventListener('change', () => { pmUploadBtn.disabled = pmPicker.getFiles().length === 0; });
+
+      document.querySelectorAll('[data-close-photo]').forEach((b) =>
+        b.addEventListener('click', () => { photoModal.style.display = 'none'; }));
+      photoModal.addEventListener('click', (e) => { if (e.target === photoModal) photoModal.style.display = 'none'; });
+
+      function openPhotoModal(ach) {
+        photoTarget = ach;
+        document.getElementById('photo-modal-sub').textContent = `${ach.title} (${ach.public_id})`;
+        document.getElementById('pm-prev').innerHTML = '';
+        document.getElementById('pm-hint').textContent = '';
+        pmPicker.reset();
+        pmUploadBtn.disabled = true;
+        photoModal.style.display = 'flex';
+        loadPhotoList();
+      }
+
+      async function loadPhotoList() {
+        const list = document.getElementById('pm-list');
+        list.innerHTML = UI.loadingBox('Loading photos...');
+        try {
+          const res = await API.get(`/achievements/${photoTarget.id}/photos`);
+          const photos = (res.data && res.data.photos) || [];
+          if (!photos.length) {
+            list.innerHTML = '<p style="color:var(--muted)">No photos yet. The achievement card shows a placeholder until you upload one.</p>';
+            return;
+          }
+          list.innerHTML = `<div class="pm-grid">${photos.map((p, i) => `
+            <div class="pm-item" data-pid="${p.id}">
+              ${i === 0 ? '<span class="pm-cover">COVER</span>' : ''}
+              <img src="${UI.esc(p.file_path)}" alt="Achievement photo" loading="lazy">
+              <div class="pm-tools">
+                <button data-replace="${p.id}">Replace</button>
+                <button class="pm-del" data-remove="${p.id}">Remove</button>
+              </div>
+            </div>`).join('')}</div>`;
+
+          list.querySelectorAll('[data-remove]').forEach((b) =>
+            b.addEventListener('click', () => removePhoto(+b.dataset.remove)));
+          list.querySelectorAll('[data-replace]').forEach((b) =>
+            b.addEventListener('click', () => replacePhoto(+b.dataset.replace)));
+        } catch (err) {
+          list.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        }
+      }
+
+      function pickReplacement(cb) {
+        const inp = document.createElement('input');
+        inp.type = 'file';
+        inp.accept = 'image/jpeg,image/png,image/webp,image/gif';
+        inp.addEventListener('change', () => { if (inp.files[0]) cb(inp.files[0]); });
+        inp.click();
+      }
+
+      async function replacePhoto(photoId) {
+        pickReplacement(async (file) => {
+          if (!['image/jpeg','image/png','image/webp','image/gif'].includes(file.type)) { UI.toast('Use a JPEG, PNG, WebP or GIF image.', 'error'); return; }
+          if (file.size > 5 * 1024 * 1024) { UI.toast('Image must be under 5 MB.', 'error'); return; }
+          try {
+            const fd = new FormData();
+            fd.append('media', file);
+            await API.putForm(`/achievements/${photoTarget.id}/photos/${photoId}`, fd);
+            UI.toast('Photo replaced', 'success');
+            loadPhotoList();
+            load();
+          } catch (e) { UI.toast(e.message, 'error'); }
+        });
+      }
+
+      async function removePhoto(photoId) {
+        if (!(await UI.confirm('Remove this photo? The achievement itself will not be deleted.', { confirmText: 'Remove photo' }))) return;
+        try {
+          await API.del(`/achievements/${photoTarget.id}/photos/${photoId}`);
+          UI.toast('Photo removed', 'success');
+          loadPhotoList();
+          load();
+        } catch (e) { UI.toast(e.message, 'error'); }
+      }
+
+      // ---- Table ----
+      async function load() {
+        box.innerHTML = UI.loadingBox('Loading achievements...');
+        try {
+          const res = await API.get('/achievements');
+          const rows = res.data || [];
+          if (!rows.length) { box.innerHTML = UI.empty('No achievements recorded'); return; }
+
+          box.innerHTML = `<div class="table-wrap"><table>
+            <thead><tr><th>ID</th><th>Title</th><th>Winner / Team</th><th>Photos</th><th>Year</th><th>Category</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>${rows.map((a) => {
+              const names = [a.team_name, a.winner_names].filter(Boolean).join(', ') || '<span style="color:var(--muted)">-</span>';
+              const photos = Number(a.photo_count || 0);
+              return `
+              <tr>
+                <td data-label="ID" class="mono">${UI.esc(a.public_id)}</td>
+                <td data-label="Title"><a href="/achievement-details.html?id=${a.id}">${UI.esc(a.title)}</a><br>
+                  <span style="font-size:12px;color:var(--muted)">${UI.esc(a.competition_name)}</span></td>
+                <td data-label="Winner / Team">${names}</td>
+                <td data-label="Photos">${photos > 0 ? `<button class="btn btn-sm btn-secondary" data-view="${a.id}">&#128247; ${photos}</button>` : '<span style="color:var(--muted)">None</span>'}</td>
+                <td data-label="Year">${a.achievement_year}</td>
+                <td data-label="Category">${UI.categoryLabel(a.category)}</td>
+                <td data-label="Status">${UI.statusBadge(a.verification_status)}${a.is_archived ? ' <span class="badge badge-gray">Archived</span>' : ''}</td>
+                <td data-label="Actions" style="white-space:nowrap">
+                  ${a.verification_status === 'PENDING_VERIFICATION' ? `
+                    <button class="btn btn-sm" data-verify="${a.id}">Verify</button>
+                    <button class="btn btn-sm btn-danger" data-reject="${a.id}">Reject</button>` : ''}
+                  ${!a.is_archived ? `<button class="btn btn-sm btn-secondary" data-archive="${a.id}">Archive</button>` : ''}
+                  <button class="btn btn-sm btn-secondary" data-photos="${a.id}">Photos</button>
+                  <button class="btn btn-sm" data-winner="${a.id}">Add winner</button>
+                  <button class="btn btn-sm btn-secondary" data-winners-view="${a.id}">Winners</button>
+                  <button class="btn btn-sm btn-danger" data-delete="${a.id}" data-title="${UI.esc(a.title)}">Delete</button>
+                </td>
+              </tr>`;
+            }).join('')}</tbody>
+          </table></div>`;
+
+          const byId = {}; rows.forEach((a) => { byId[a.id] = a; });
+
+          box.querySelectorAll('[data-verify]').forEach((b) => b.addEventListener('click', async () => {
+            try { const r = await API.put(`/achievements/${b.dataset.verify}/verify`); UI.toast(r.message, 'success'); load(); }
+            catch (e) { UI.toast(e.message, 'error'); }
+          }));
+          box.querySelectorAll('[data-reject]').forEach((b) => b.addEventListener('click', async () => {
+            const reason = await UI.prompt('Reason for rejecting this achievement:', { title: 'Reject achievement', confirmText: 'Reject', multiline: true });
+            if (!reason) return;
+            try { await API.put(`/achievements/${b.dataset.reject}/reject`, { reason }); UI.toast('Rejected', 'success'); load(); }
+            catch (e) { UI.toast(e.message, 'error'); }
+          }));
+          box.querySelectorAll('[data-archive]').forEach((b) => b.addEventListener('click', async () => {
+            if (!(await UI.confirm('Archive this record? It will be hidden from the Hall of Fame.', { confirmText: 'Archive' }))) return;
+            try { await API.put(`/achievements/${b.dataset.archive}/archive`); UI.toast('Archived', 'success'); load(); }
+            catch (e) { UI.toast(e.message, 'error'); }
+          }));
+          box.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => {
+            const a = byId[+b.dataset.view];
+            UI.viewAchievementPhotos(a.id, { title: a.title, subtitle: a.team_name || a.winner_names || '', positionText: UI.positionLabel(a.position) });
+          }));
+          box.querySelectorAll('[data-photos]').forEach((b) => b.addEventListener('click', () => openPhotoModal(byId[+b.dataset.photos])));
+          box.querySelectorAll('[data-winner]').forEach((b) => b.addEventListener('click', () => openWinnerModal(byId[+b.dataset.winner], null)));
+          box.querySelectorAll('[data-winners-view]').forEach((b) => b.addEventListener('click', () => manageWinners(byId[+b.dataset.winnersView])));
+          box.querySelectorAll('[data-delete]').forEach((b) => b.addEventListener('click', async () => {
+            if (!(await UI.confirm(`Permanently delete "${b.dataset.title}"? This removes its winners and photos too and cannot be undone.`, { confirmText: 'Delete forever' }))) return;
+            try { await API.del(`/achievements/${b.dataset.delete}`); UI.toast('Deleted', 'success'); load(); }
+            catch (e) { UI.toast(e.message, 'error'); }
+          }));
+        } catch (err) {
+          box.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        }
+      }
+
+      // ---- Winners list: edit / remove individual winner records ----
+      async function manageWinners(ach) {
+        let a;
+        try { a = (await API.get(`/achievements/${ach.id}`)).data; }
+        catch (e) { UI.toast(e.message, 'error'); return; }
+        const winners = a.winners || [];
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.innerHTML = `
+          <div class="modal" style="max-width:560px;max-height:88vh;overflow:auto">
+            <h3>Winners &amp; Teams</h3>
+            <p class="hint">${UI.esc(a.title)}</p>
+            ${winners.length ? `<div class="table-wrap"><table>
+              <thead><tr><th>Name / Team</th><th>Award</th><th>Description</th><th></th></tr></thead>
+              <tbody>${winners.map((w) => `
+                <tr>
+                  <td>${UI.esc(w.winner_name || w.team_name || '-')}</td>
+                  <td>${w.position ? UI.positionLabel(w.position) : '<span style="color:var(--muted)">-</span>'}</td>
+                  <td>${UI.esc(w.description || '-')}</td>
+                  <td style="white-space:nowrap">
+                    <button class="btn btn-sm btn-secondary" data-edit="${w.id}">Edit</button>
+                    <button class="btn btn-sm btn-danger" data-del="${w.id}">Remove</button>
+                  </td>
+                </tr>`).join('')}</tbody></table></div>`
+              : '<p style="color:var(--muted)">No winners recorded yet.</p>'}
+            <div class="modal-actions">
+              <button class="btn btn-secondary" data-close-x>Close</button>
+              <button class="btn" data-add-x>Add another winner</button>
+            </div>
+          </div>`;
+        document.body.appendChild(overlay);
+        const close = () => overlay.remove();
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+        overlay.querySelector('[data-close-x]').addEventListener('click', close);
+        overlay.querySelector('[data-add-x]').addEventListener('click', () => { close(); openWinnerModal(ach, null); });
+        overlay.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => {
+          const w = winners.find((x) => x.id === +b.dataset.edit);
+          close(); openWinnerModal(ach, w);
+        }));
+        overlay.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', async () => {
+          if (!(await UI.confirm('Remove this winner record? The achievement and its photos stay.', { confirmText: 'Remove winner' }))) return;
+          try { await API.del(`/achievements/${ach.id}/winners/${b.dataset.del}`); UI.toast('Winner removed', 'success'); close(); load(); }
+          catch (e) { UI.toast(e.message, 'error'); }
+        }));
+      }
+
+      load();
+    })();
+  </script>
+</body>
+</html>

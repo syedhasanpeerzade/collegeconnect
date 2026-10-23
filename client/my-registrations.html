@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Registrations - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="container">
+    <div class="page-head">
+      <div><h1>My Registrations</h1><div class="sub">All events you have registered for.</div></div>
+      <a class="btn btn-secondary" href="/events.html">Browse events</a>
+    </div>
+    <div id="content"><div class="loading">Loading...</div></div>
+  </div>
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      const user = Auth.requireRole(['STUDENT', 'ORGANIZER', 'CLUB_COORDINATOR', 'FACULTY', 'ADMIN']);
+      if (!user) return;
+      const box = document.getElementById('content');
+      try {
+        const res = await API.get('/events/my-registrations');
+        const rows = res.data || [];
+        if (!rows.length) {
+          box.innerHTML = UI.empty('No registrations yet', 'Browse the events page and register for something.');
+          return;
+        }
+        box.innerHTML = `<div class="table-wrap"><table>
+          <thead><tr><th>Event</th><th>Date</th><th>Venue</th><th>Registration ID</th><th>Status</th><th>Registered on</th><th></th></tr></thead>
+          <tbody>
+            ${rows.map((r) => `
+              <tr>
+                <td data-label="Event"><a href="/event-details.html?id=${r.event_id}">${UI.esc(r.title)}</a></td>
+                <td data-label="Date">${UI.fmtDate(r.event_date)} &middot; ${UI.fmtTime(r.start_time)}</td>
+                <td data-label="Venue">${UI.esc(r.venue)}</td>
+                <td data-label="Reg ID" class="mono">${UI.esc(r.public_id)}</td>
+                <td data-label="Status">${UI.statusBadge(r.status)}</td>
+                <td data-label="Registered">${UI.fmtDateTime(r.registered_at)}</td>
+                <td data-label="">
+                  ${r.status === 'REGISTERED' && r.registration_deadline && new Date(r.registration_deadline) > new Date()
+                    ? `<button class="btn btn-sm btn-danger" data-cancel="${r.event_id}" data-title="${UI.esc(r.title)}">Cancel</button>` : ''}
+                </td>
+              </tr>`).join('')}
+          </tbody>
+        </table></div>`;
+
+        box.addEventListener('click', async (e) => {
+          const btn = e.target.closest('[data-cancel]');
+          if (!btn) return;
+          if (!(await UI.confirm(`Cancel your registration for "${btn.dataset.title}"?`, { confirmText: 'Yes, cancel' }))) return;
+          try {
+            const res = await API.del(`/events/${btn.dataset.cancel}/register`);
+            UI.toast(res.message, 'success');
+            setTimeout(() => location.reload(), 900);
+          } catch (err) { UI.toast(err.message, 'error'); }
+        });
+      } catch (err) {
+        box.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+      }
+    })();
+  </script>
+</body>
+</html>

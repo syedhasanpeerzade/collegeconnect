@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Achievements &amp; Hall of Fame - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <style>
+    /* Skeleton loaders + card facts (scoped to this page) */
+    .ach-grid .skel-card { height: 260px; border-radius: 14px; overflow: hidden; }
+    .skel { display: block; background: linear-gradient(90deg, var(--border, #eceef2) 25%, #f6f7fa 40%, var(--border, #eceef2) 60%); background-size: 200% 100%; animation: skelwave 1.2s infinite linear; border-radius: 8px; }
+    .skel-line { height: 12px; margin: 10px 0; }
+    .skel-media { height: 110px; margin-bottom: 8px; border-radius: 10px 10px 0 0; }
+    .skel-line.short { width: 55%; }
+    .skel-line.mid { width: 80%; }
+    @keyframes skelwave { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+    .ach-comp { display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; margin: 6px 0 2px; font-size: 13px; }
+    .ach-comp .ach-pos { font-weight: 700; color: var(--primary, #2450c4); }
+    .ach-comp .ach-con { color: var(--muted, #60708a); }
+    .ach-comp .ach-when { color: var(--muted, #60708a); }
+    .ach-retry { margin-top: 10px; }
+    .load-more-wrap { text-align: center; padding: 6px 0 18px; }
+  </style>
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="container">
+    <div class="page-head">
+      <div>
+        <h1>College Achievements &amp; Hall of Fame</h1>
+        <div class="sub">Verified competition results, club accomplishments and student awards. Sample records are demonstration data and do not represent real college results.</div>
+      </div>
+      <button class="btn btn-add-achievement" id="new-ach" style="display:none">+ Add Achievement</button>
+    </div>
+
+    <div id="year-index" class="hof-year" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+
+    <div class="filter-bar explore-search" style="margin-top:14px">
+      <input type="search" class="search" id="f-search" placeholder="Search achievements, competitions..." aria-label="Search achievements">
+      <select id="f-category" aria-label="Category filter">
+        <option value="">All categories</option>
+        <option>TECHNICAL</option><option>SPORTS</option><option>CULTURAL</option>
+        <option>ACADEMIC</option><option>HACKATHON</option><option>INNOVATION</option>
+        <option>RESEARCH</option><option>LEADERSHIP</option><option>SOCIAL_SERVICE</option><option>OTHER</option>
+      </select>
+      <input type="number" id="f-year" placeholder="Year" min="1990" max="2100" style="width:100px" aria-label="Year filter">
+      <select id="f-sort" aria-label="Sort order">
+        <option value="year_desc">Sort: Newest year</option>
+        <option value="year_asc">Sort: Oldest year</option>
+        <option value="newest">Sort: Recently added</option>
+      </select>
+      <button class="btn btn-sm" id="f-apply">Apply</button>
+      <button class="btn btn-sm btn-secondary" id="f-clear">Clear</button>
+    </div>
+
+    <!-- Latest completed event + winners (auto-selected, never hard-coded) -->
+    <div id="latest-event"><div class="loading">Loading latest results...</div></div>
+
+    <div class="section">
+      <h2>Previous Achievements</h2>
+      <div id="ach-grid" class="ach-grid" aria-live="polite"></div>
+      <div id="ach-status"></div>
+      <div class="load-more-wrap">
+        <button class="btn btn-secondary" id="load-more" style="display:none">Load More</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add / Edit Achievement modal -->
+  <div class="modal-overlay" id="ach-modal" style="display:none">
+    <div class="modal" style="max-width:760px;max-height:92vh;overflow:auto">
+      <div class="ach-form-bar">
+        <div class="ach-form-title">
+          <h3 id="ach-form-title">Add Achievement</h3>
+          <span class="ach-form-sub" id="ach-form-sub">Fill in the details below and the record will be saved to the database and shown on this page instantly.</span>
+        </div>
+        <div class="ach-form-actions">
+          <button type="button" class="btn btn-secondary" id="ach-close-modal">Cancel</button>
+          <button type="submit" class="btn btn-add-achievement" id="ach-save" form="ach-form">Save Achievement</button>
+        </div>
+      </div>
+      <p class="hint">Required fields are marked with an asterisk (*).</p>
+      <form id="ach-form" class="ach-form" novalidate>
+        <div class="form-row">
+          <div class="field">
+            <label for="ach-title">Achievement Title <span class="req">*</span></label>
+            <input id="ach-title" required placeholder="e.g. Inter-College Hackathon 2026 - Team Coders">
+          </div>
+          <div class="field">
+            <label for="ach-comp">Competition / Event Name <span class="req">*</span></label>
+            <input id="ach-comp" required placeholder="e.g. Inter-College Hackathon 2026">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label for="ach-category">Achievement Category <span class="req">*</span></label>
+            <select id="ach-category">
+              <option value="">Select category</option>
+              <option>TECHNICAL</option><option>SPORTS</option><option>CULTURAL</option>
+              <option>ACADEMIC</option><option>HACKATHON</option><option>INNOVATION</option>
+              <option>RESEARCH</option><option>LEADERSHIP</option><option>SOCIAL_SERVICE</option><option>OTHER</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="ach-year">Achievement Year <span class="req">*</span></label>
+            <input type="number" id="ach-year" min="1990" max="2100" required value="">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label for="ach-event-date">Competition Date <span class="req">*</span></label>
+            <input type="date" id="ach-event-date" required>
+          </div>
+          <div class="field">
+            <label for="ach-venue">Competition Venue <span class="hint">(optional)</span></label>
+            <input id="ach-venue" placeholder="e.g. Central Auditorium">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label for="ach-position">Winning Position <span class="req">*</span></label>
+            <select id="ach-position">
+              <option value="">Select position</option>
+              <option value="1ST_PLACE">1st Place</option>
+              <option value="2ND_PLACE">2nd Place</option>
+              <option value="3RD_PLACE">3rd Place</option>
+              <option value="WINNER">Winner</option>
+              <option value="RUNNER_UP">Runner-Up</option>
+              <option value="FINALIST">Finalist</option>
+              <option value="PARTICIPATION">Participation</option>
+              <option value="OTHER">Other</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="ach-winners">Winner / Team Name <span class="hint">(optional)</span></label>
+            <input id="ach-winners" placeholder="e.g. Team Coders">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label for="ach-club">Organizing Club <span class="hint">(optional)</span></label>
+            <select id="ach-club"><option value="">None</option></select>
+          </div>
+          <div class="field">
+            <label for="ach-event">Link to college event <span class="hint">(optional)</span></label>
+            <select id="ach-event"><option value="">None</option></select>
+          </div>
+        </div>
+        <div class="field">
+          <label for="ach-desc">Achievement Description <span class="req">*</span></label>
+          <textarea id="ach-desc" required maxlength="5000" style="min-height:70px" placeholder="What was achieved? What made it special?"></textarea>
+        </div>
+        <div class="field">
+          <label for="ach-prize">Prize / Award Details <span class="hint">(optional)</span></label>
+          <textarea id="ach-prize" maxlength="2000" placeholder="Medals, certificates, cash rewards, trophy..."></textarea>
+        </div>
+        <div class="form-row" id="ach-files-row">
+          <div class="field">
+            <label>Upload Certificate or Proof <span class="hint">(optional - PDF/image up to 5 MB)</span></label>
+            <input type="file" id="ach-cert" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp">
+            <div class="upload-hint" id="ach-cert-hint"></div>
+          </div>
+          <div class="field">
+            <label>Upload Achievement Images <span class="hint">(JPEG/PNG/WebP/GIF up to 5 MB each, up to 4)</span></label>
+            <input type="file" id="ach-media" accept="image/jpeg,image/png,image/webp,image/gif" multiple>
+            <div class="upload-previews" id="ach-media-prev"></div>
+            <div class="upload-hint" id="ach-media-hint"></div>
+          </div>
+        </div>
+        <div class="field" id="ach-verdict-row">
+          <label for="ach-verdict">Verification Status</label>
+          <select id="ach-verdict">
+            <option value="PENDING_VERIFICATION">Pending Verification - needs review before publishing</option>
+            <option value="VERIFIED">Verified - published to the Hall of Fame</option>
+          </select>
+        </div>
+        <div id="ach-form-msg"></div>
+      </form>
+    </div>
+  </div>
+
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      const user = Auth.user();
+      // Read-only for everyone else; only ADMIN / FACULTY (HOD) manage results.
+      // The backend enforces this authorization independently of the UI.
+      const staff = !!user && (user.role === 'ADMIN' || user.role === 'FACULTY');
+
+      const grid = document.getElementById('ach-grid');
+      const statusBox = document.getElementById('ach-status');
+      const loadMoreBtn = document.getElementById('load-more');
+      const modal = document.getElementById('ach-modal');
+      const PAGE_SIZE = 12;
+
+      if (staff) {
+        document.getElementById('new-ach').style.display = 'inline-flex';
+        document.getElementById('new-ach').addEventListener('click', () => openModal(null));
+      }
+      document.getElementById('ach-close-modal').addEventListener('click', () => closeFormOnly());
+      modal.addEventListener('click', (e) => { if (e.target === modal) closeFormOnly(); });
+
+      function closeFormOnly() { modal.style.display = 'none'; document.getElementById('ach-form-msg').innerHTML = ''; }
+
+      // ---- Skeleton / empty / error states ----
+      function skeleton(count) {
+        return Array.from({ length: count || 3 }, () => `
+          <div class="skel-card" aria-hidden="true">
+            <span class="skel skel-media"></span>
+            <span class="skel skel-line mid"></span>
+            <span class="skel skel-line"></span>
+            <span class="skel skel-line short"></span>
+          </div>`).join('');
+      }
+
+      function showError(err) {
+        statusBox.innerHTML = `
+          <div class="error-box">
+            <b>Could not load achievements.</b>
+            <div>${UI.esc((err && err.message) || 'Something went wrong. Check your connection and try again.')}</div>
+            <button class="btn btn-sm ach-retry" id="ach-retry">Retry</button>
+          </div>`;
+        document.getElementById('ach-retry').addEventListener('click', () => load(true));
+      }
+
+      function showEmpty() {
+        grid.innerHTML = '';
+        loadMoreBtn.style.display = 'none';
+        statusBox.innerHTML = UI.empty('No achievements found', 'Try different filters — or check back after the next competition is recorded.');
+      }
+
+      // ---- Filters ----
+      function filters() {
+        const p = new URLSearchParams();
+        const s = document.getElementById('f-search').value.trim();
+        const c = document.getElementById('f-category').value;
+        const y = document.getElementById('f-year').value;
+        const so = document.getElementById('f-sort').value;
+        if (s) p.set('search', s);
+        if (c) p.set('category', c);
+        if (y) p.set('year', y);
+        if (so) p.set('sort', so);
+        return p.toString();
+      }
+
+      // ---- Load + render (supports Load More pagination) ----
+      let offset = 0;
+      let lastRows = [];
+
+      function cardActionsFor(a) {
+        if (!staff) return `<a class="btn btn-sm btn-secondary card-action-btn" href="/achievement-details.html?id=${a.id}">View Details</a>`;
+        const verified = a.verification_status === 'VERIFIED';
+        return `
+          <button class="btn btn-sm card-action-btn" data-ach-edit="${a.id}">Edit</button>
+          <button class="btn btn-sm btn-secondary card-action-btn" data-ach-verify="${a.id}" data-verified="${verified ? '1' : '0'}">${verified ? 'Unverify' : 'Verify'}</button>
+          <button class="btn btn-sm btn-danger card-action-btn" data-ach-delete="${a.id}" data-title="${UI.esc(a.title)}">Delete</button>`;
+      }
+
+      function renderChunk(rows) {
+        grid.insertAdjacentHTML('beforeend', rows.map((a) => UI.achievementCard(a, { extraActions: () => '' })).join(''));
+        // Bind actions by achievement id
+        rows.forEach((a) => {
+          const card = grid.querySelector(`.ach-card[data-ach-card="${a.id}"]`);
+          if (card) {
+            const slot = card.querySelector('.card-actions');
+            slot.innerHTML = cardActionsFor(a);
+            const editBtn = slot.querySelector('[data-ach-edit]');
+            const verBtn = slot.querySelector('[data-ach-verify]');
+            const delBtn = slot.querySelector('[data-ach-delete]');
+            if (editBtn) editBtn.addEventListener('click', () => openModal(a));
+            if (verBtn) verBtn.addEventListener('click', () => toggleVerify(a, verBtn));
+            if (delBtn) delBtn.addEventListener('click', () => remove(a, delBtn));
+          }
+        });
+      }
+
+      async function load(reset, retry) {
+        if (reset) { offset = 0; lastRows = []; grid.innerHTML = skeleton(3); statusBox.innerHTML = ''; loadMoreBtn.style.display = 'none'; }
+        else { loadMoreBtn.disabled = true; loadMoreBtn.textContent = 'Loading...'; }
+        try {
+          const res = await API.get(`/achievements?${filters()}&limit=${PAGE_SIZE}&offset=${offset}`);
+          const rows = res.data || [];
+          if (reset && !rows.length) { grid.innerHTML = ''; showEmpty(); return; }
+          lastRows = lastRows.concat(rows);
+          grid.innerHTML = '';
+          statusBox.innerHTML = '';
+          renderChunk(lastRows);
+          offset += rows.length;
+          loadMoreBtn.style.display = rows.length >= PAGE_SIZE ? 'inline-flex' : 'none';
+        } catch (err) {
+          if (reset) showError(err);
+          else UI.toast(err.message, 'error');
+        } finally {
+          loadMoreBtn.disabled = false; loadMoreBtn.textContent = 'Load More';
+        }
+      }
+      loadMoreBtn.addEventListener('click', () => load(false));
+
+      document.getElementById('f-apply').addEventListener('click', () => load(true));
+      document.getElementById('f-search').addEventListener('keydown', (e) => { if (e.key === 'Enter') load(true); });
+      document.getElementById('f-clear').addEventListener('click', () => {
+        ['f-search', 'f-year'].forEach((id) => { document.getElementById(id).value = ''; });
+        document.getElementById('f-category').value = '';
+        document.getElementById('f-sort').value = 'year_desc';
+        load(true);
+      });
+
+      // Per-card staff actions
+      async function toggleVerify(a, btn) {
+        const next = a.verification_status === 'VERIFIED' ? 'pending' : 'verify';
+        btn.disabled = true;
+        try {
+          if (next === 'verify') {
+            const r = await API.put(`/achievements/${a.id}/verify`);
+            UI.toast(r.message, 'success');
+          } else {
+            const r = await API.put(`/achievements/${a.id}/unverify`);
+            UI.toast(r.message, 'success');
+          }
+          load(true);
+        } catch (err) { UI.toast(err.message, 'error'); btn.disabled = false; }
+      }
+
+      async function remove(a, btn) {
+        if (!(await UI.confirm(`Delete "${a.title}" and its photos? This cannot be undone.`, { title: 'Delete achievement', confirmText: 'Delete forever' }))) return;
+        btn.disabled = true;
+        try {
+          await API.del(`/achievements/${a.id}`);
+          UI.toast('Achievement deleted', 'success');
+          load(true);
+        } catch (err) { UI.toast(err.message, 'error'); btn.disabled = false; }
+      }
+
+      // ---- Year chips ----
+      (async () => {
+        try {
+          const yr = await API.get('/achievements/years');
+          const el = document.getElementById('year-index');
+          el.innerHTML = '<b>Years:</b> ' + (yr.data || []).map((y) =>
+            `<a href="#" data-year="${y.year}" class="badge badge-gray">${y.year} (${y.count})</a>`).join(' ');
+          el.querySelectorAll('[data-year]').forEach((a) => {
+            a.addEventListener('click', (e) => {
+              e.preventDefault();
+              document.getElementById('f-year').value = a.dataset.year;
+              load(true);
+            });
+          });
+        } catch (_e) { /* optional */ }
+      })();
+
+      // ---- Featured: latest completed event + winners ----
+      (async () => {
+        const latest = document.getElementById('latest-event');
+        latest.innerHTML = skeleton(1).replace('skel-card', 'skel-card le-card');
+        try {
+          const res = await API.get('/latest-results');
+          const d = res.data;
+          if (!d || !d.event) { latest.innerHTML = ''; return; }
+          const ev = d.event;
+          const line = (medal, p) => p ? `
+            <div class="le-line"><span class="le-medal">${medal}</span>
+              <span><b>${UI.esc(p.team_name || p.winner_names || '-')}</b>
+              ${p.winner_names && p.team_name ? `<span class="le-members">&#128100; Members: ${UI.esc(p.winner_names)}</span>` : ''}
+              ${p.department_code ? `<span class="le-dept">${UI.esc(p.department_code)}</span>` : ''}
+              ${p.club_name ? `<span class="le-dept">${UI.esc(p.club_name)}</span>` : ''}</span>
+            </div>` : '';
+          latest.innerHTML = `
+            <div class="card le-card">
+              <div class="le-banner" ${ev.poster_path ? `style="background-image:url('${UI.esc(ev.poster_path)}')"` : ''}>
+                <span class="le-kicker">&#127942; LATEST ACHIEVEMENT</span>
+                <span class="le-title">${UI.esc(ev.title)}</span>
+                <span class="le-meta">${ev.event_date ? `&#128197; ${UI.fmtDate(ev.event_date)}` : ''}
+                  &middot; ${UI.esc(UI.categoryLabel(ev.category))}
+                  ${ev.venue ? ` &middot; &#128205; ${UI.esc(ev.venue)}` : ''}</span>
+              </div>
+              <div class="le-body">
+                ${line('&#129351;', d.winner)}
+                ${line('&#129352;', d.runner_up)}
+                ${line('&#129353;', d.third_place)}
+                <a class="btn btn-sm" href="/event-details.html?id=${ev.id}" style="margin-top:14px">View Full Results &#8594;</a>
+              </div>
+            </div>`;
+        } catch (_e) {
+          latest.innerHTML = '';
+        }
+      })();
+
+      // ---- Add / Edit modal ----
+      const achForm = document.getElementById('ach-form');
+      const editIdField = { value: null };  // null = create
+      achForm.addEventListener('submit', submitAchievement);
+
+      const certPicker = UI.bindFilePicker(
+        document.getElementById('ach-cert'),
+        document.getElementById('ach-cert-hint'),
+        { accept: '.pdf,.doc,.docx,.jpg,.jpeg,.png,.webp', maxMB: 5 },
+      );
+      const mediaPicker = UI.bindPhotoPicker(
+        document.getElementById('ach-media'),
+        document.getElementById('ach-media-prev'),
+        document.getElementById('ach-media-hint'),
+        { max: 4, maxMB: 5 },
+      );
+
+      const modalRefs = { clubs: [], events: [] };
+      (async () => {
+        try {
+          const [c, e] = await Promise.all([API.get('/clubs'), API.get('/events?limit=200')]);
+          modalRefs.clubs = c.data || [];
+          modalRefs.events = (e.data && e.data.events) || [];
+          document.getElementById('ach-club').innerHTML = '<option value="">None</option>' +
+            modalRefs.clubs.map((cc) => `<option value="${cc.id}">${UI.esc(cc.name)}</option>`).join('');
+          document.getElementById('ach-event').innerHTML = '<option value="">None</option>' +
+            modalRefs.events.map((ee) => `<option value="${ee.id}">${UI.esc(ee.title)}</option>`).join('');
+        } catch (_e) { /* form still usable without refs */ }
+      })();
+
+      function openModal(a) {
+        editIdField.value = a ? a.id : null;
+        document.getElementById('ach-form-title').textContent = a ? 'Edit Achievement' : 'Add Achievement';
+        document.getElementById('ach-form-sub').textContent = a
+          ? `Updating record ${a.public_id}. Press Save to persist your changes.`
+          : 'Fill in the details below and the record will be saved to the database and shown on this page instantly.';
+        document.getElementById('ach-title').value = a ? (a.title || '') : '';
+        document.getElementById('ach-comp').value = a ? (a.competition_name || '') : '';
+        document.getElementById('ach-category').value = a ? (a.category || '') : '';
+        document.getElementById('ach-year').value = a ? (a.achievement_year || new Date().getFullYear()) : new Date().getFullYear();
+        document.getElementById('ach-event-date').value = a ? (a.event_date || '') : '';
+        document.getElementById('ach-venue').value = a ? (a.venue || '') : '';
+        document.getElementById('ach-position').value = a ? (a.position || '') : '';
+        document.getElementById('ach-winners').value = a ? (a.team_name || a.winner_names || '') : '';
+        document.getElementById('ach-club').value = a ? (a.club_id || '') : '';
+        document.getElementById('ach-event').value = a ? (a.event_id || '') : '';
+        document.getElementById('ach-desc').value = a ? (a.description || '') : '';
+        document.getElementById('ach-prize').value = a ? (a.prize_details || '') : '';
+        document.getElementById('ach-verdict').value = a ? (a.verification_status || 'PENDING_VERIFICATION') : 'PENDING_VERIFICATION';
+        // Files are uploaded on create; photo/certificate management is in the admin area.
+        document.getElementById('ach-files-row').style.display = a ? 'none' : '';
+        certPicker.reset(); mediaPicker.reset();
+        document.getElementById('ach-form-msg').innerHTML = '';
+        modal.style.display = 'flex';
+        document.getElementById('ach-title').focus();
+      }
+
+      async function submitAchievement(ev) {
+        ev.preventDefault();
+        const msg = document.getElementById('ach-form-msg');
+        msg.innerHTML = '';
+        const title = document.getElementById('ach-title').value.trim();
+        const comp = document.getElementById('ach-comp').value.trim();
+        const category = document.getElementById('ach-category').value;
+        const year = document.getElementById('ach-year').value;
+        const eventDate = document.getElementById('ach-event-date').value;
+        const venue = document.getElementById('ach-venue').value.trim();
+        const position = document.getElementById('ach-position').value;
+        const winnerName = document.getElementById('ach-winners').value.trim();
+        const desc = document.getElementById('ach-desc').value.trim();
+        const prize = document.getElementById('ach-prize').value.trim();
+        const verdict = document.getElementById('ach-verdict').value;
+
+        if (!title || !comp || !category || !year || !eventDate || !position || !desc) {
+          msg.innerHTML = '<div class="error-box">Please fill in every required field (* marked).</div>';
+          return;
+        }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) {
+          msg.innerHTML = '<div class="error-box">Competition date must be a valid date.</div>';
+          return;
+        }
+
+        const saveBtn = document.getElementById('ach-save');
+        saveBtn.disabled = true;
+        try {
+          const editing = editIdField.value;
+          const certFiles = certPicker.getFiles();
+          const mediaFiles = mediaPicker.getFiles();
+          if (!editing && (certFiles.length > 1)) {
+            throw new Error('Please upload only one certificate / proof file.');
+          }
+
+          if (editing) {
+            await API.put(`/achievements/${editing}`, {
+              title, competition_name: comp, category,
+              achievement_year: parseInt(year, 10), event_date: eventDate,
+              venue, position, description: desc, prize_details: prize,
+              club_id: document.getElementById('ach-club').value || null,
+              event_id: document.getElementById('ach-event').value || null,
+            });
+            UI.toast('Achievement updated', 'success');
+          } else {
+            const fd = new FormData();
+            fd.append('title', title);
+            fd.append('competition_name', comp);
+            fd.append('category', category);
+            fd.append('achievement_year', year);
+            fd.append('event_date', eventDate);
+            fd.append('venue', venue);
+            fd.append('position', position);
+            fd.append('description', desc);
+            fd.append('prize_details', prize);
+            fd.append('verification_status', verdict);
+            if (winnerName) {
+              fd.append('winners', JSON.stringify([{ winner_name: winnerName, role: 'INDIVIDUAL' }]));
+            }
+            const clubVal = document.getElementById('ach-club').value;
+            const evVal = document.getElementById('ach-event').value;
+            if (clubVal) fd.append('club_id', clubVal);
+            if (evVal) fd.append('event_id', evVal);
+            if (certFiles[0]) fd.append('cert', certFiles[0]);
+            for (const f of mediaFiles) fd.append('media', f);
+            const res = await API.postForm('/achievements', fd);
+            UI.toast(res.message, 'success');
+          }
+          modal.style.display = 'none';
+          load(true);
+        } catch (err) {
+          msg.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        } finally {
+          saveBtn.disabled = false;
+        }
+      }
+
+      load(true);
+    })();
+  </script>
+</body>
+</html>

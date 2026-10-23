@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Event Requests - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="container">
+    <div class="page-head">
+      <div><h1>My Event Requests</h1><div class="sub">Track proposals through review.</div></div>
+      <a class="btn" href="/event-request.html">New Proposal</a>
+    </div>
+    <div id="content"><div class="loading">Loading...</div></div>
+  </div>
+
+  <div class="modal-overlay" id="detail-modal" style="display:none">
+    <div class="modal" style="max-width:640px;max-height:88vh;overflow:auto">
+      <div id="detail-body"></div>
+      <div class="modal-actions"><button class="btn btn-secondary" id="close-detail">Close</button></div>
+    </div>
+  </div>
+
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      const user = Auth.requireRole(['STUDENT', 'ORGANIZER', 'ADMIN']);
+      if (!user) return;
+      const box = document.getElementById('content');
+      const modal = document.getElementById('detail-modal');
+      const detailBody = document.getElementById('detail-body');
+      document.getElementById('close-detail').addEventListener('click', () => { modal.style.display = 'none'; });
+      modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
+
+      const params = new URLSearchParams(location.search);
+      if (params.get('submitted')) {
+        UI.toast(`Request ${params.get('submitted')} submitted successfully`, 'success');
+      }
+
+      async function load() {
+        box.innerHTML = UI.loadingBox('Loading requests...');
+        try {
+          const res = await API.get('/events/requests?mine=1');
+          const rows = res.data || [];
+          if (!rows.length) {
+            box.innerHTML = UI.empty('No event requests yet', 'Submit your first proposal from the organizer dashboard.');
+            return;
+          }
+          box.innerHTML = `<div class="table-wrap"><table>
+            <thead><tr><th>Request ID</th><th>Title</th><th>Date</th><th>Status</th><th>Remarks</th><th></th></tr></thead>
+            <tbody>${rows.map((r) => `
+              <tr>
+                <td data-label="ID" class="mono">${UI.esc(r.public_id)}</td>
+                <td data-label="Title">${UI.esc(r.title)}</td>
+                <td data-label="Date">${UI.fmtDate(r.proposed_date)}</td>
+                <td data-label="Status">${UI.statusBadge(r.status)}</td>
+                <td data-label="Remarks" style="max-width:260px">${UI.esc(r.review_remarks || '-')}</td>
+                <td data-label="">
+                  <button class="btn btn-sm btn-secondary" data-detail="${r.id}">Details</button>
+                  ${r.status === 'CHANGES_REQUESTED' ? `<button class="btn btn-sm" data-resubmit="${r.id}">Edit &amp; Resubmit</button>` : ''}
+                </td>
+              </tr>`).join('')}</tbody>
+          </table></div>`;
+
+          box.querySelectorAll('[data-detail]').forEach((b) => {
+            b.addEventListener('click', async () => {
+              try {
+                const res = await API.get(`/events/requests/${b.dataset.detail}`);
+                const r = res.data;
+                detailBody.innerHTML = `
+                  <h3 style="margin-top:0">${UI.esc(r.title)} ${UI.statusBadge(r.status)}</h3>
+                  <dl class="kv">
+                    <dt>Request ID</dt><dd class="mono">${UI.esc(r.public_id)}</dd>
+                    <dt>Category</dt><dd>${UI.categoryLabel(r.category)} (${UI.categoryLabel(r.event_type)})</dd>
+                    <dt>Date &amp; time</dt><dd>${UI.fmtDate(r.proposed_date)}, ${UI.fmtTime(r.start_time)} - ${UI.fmtTime(r.end_time)}</dd>
+                    <dt>Venue</dt><dd>${UI.esc(r.venue)}</dd>
+                    <dt>Expected</dt><dd>${r.expected_participants} participants</dd>
+                    ${r.estimated_budget ? `<dt>Budget</dt><dd>INR ${Number(r.estimated_budget).toLocaleString('en-IN')}</dd>` : ''}
+                    ${r.required_facilities ? `<dt>Facilities</dt><dd>${UI.esc(r.required_facilities)}</dd>` : ''}
+                    ${r.faculty_name ? `<dt>Faculty</dt><dd>${UI.esc(r.faculty_name)}</dd>` : ''}
+                    ${r.event_id ? `<dt>Published event</dt><dd><a href="/event-details.html?id=${r.event_id}">Open event page</a></dd>` : ''}
+                  </dl>
+                  <h4 style="margin:14px 0 4px">Description</h4>
+                  <p style="white-space:pre-wrap">${UI.esc(r.description)}</p>
+                  ${r.review_remarks ? `<div class="error-box">Reviewer remarks: ${UI.esc(r.review_remarks)}</div>` : ''}
+                  <h4 style="margin:14px 0 4px">History</h4>
+                  <ul class="timeline">
+                    ${r.history.map((h) => `
+                      <li>
+                        <div class="tl-head">${h.old_status ? UI.categoryLabel(h.old_status) + ' &rarr; ' : ''}${UI.categoryLabel(h.new_status)}
+                          <span class="tl-time">${UI.fmtDateTime(h.created_at)}</span></div>
+                        ${h.remarks ? `<div class="tl-note">${UI.esc(h.remarks)}</div>` : ''}
+                      </li>`).join('')}
+                  </ul>`;
+                modal.style.display = 'flex';
+              } catch (err) { UI.toast(err.message, 'error'); }
+            });
+          });
+
+          box.querySelectorAll('[data-resubmit]').forEach((b) => {
+            b.addEventListener('click', async () => {
+              const id = b.dataset.resubmit;
+              try {
+                const res = await API.get(`/events/requests/${id}`);
+                const r = res.data;
+                const overlay = document.createElement('div');
+                overlay.className = 'modal-overlay';
+                overlay.innerHTML = `
+                  <div class="modal" role="dialog" aria-modal="true" style="max-width:520px">
+                    <h3>Resubmit request</h3>
+                    <p class="hint">Update the details your HOD asked for, then resubmit for review.</p>
+                    <div class="form-grid">
+                      <div class="field"><label>Event name *</label><input id="rs-title" required></div>
+                      <div class="field"><label>Venue *</label><input id="rs-venue" required></div>
+                      <div class="field"><label>Description *</label><textarea id="rs-desc" required></textarea></div>
+                      <div class="field-error" id="rs-err" style="display:none"></div>
+                    </div>
+                    <div class="modal-actions">
+                      <button class="btn btn-secondary" data-act="cancel">Cancel</button>
+                      <button class="btn" data-act="ok">Resubmit</button>
+                    </div>
+                  </div>`;
+                document.body.appendChild(overlay);
+                overlay.querySelector('#rs-title').value = r.title || '';
+                overlay.querySelector('#rs-venue').value = r.venue || '';
+                overlay.querySelector('#rs-desc').value = r.description || '';
+                const close = () => overlay.remove();
+                overlay.addEventListener('click', async (e) => {
+                  if (e.target === overlay || e.target.closest('[data-act="cancel"]')) { close(); return; }
+                  if (!e.target.closest('[data-act="ok"]')) return;
+                  const val = (sel) => overlay.querySelector(sel).value.trim();
+                  const title = val('#rs-title');
+                  const venue = val('#rs-venue');
+                  const desc = val('#rs-desc');
+                  if (!title || !venue || !desc) {
+                    const errEl = overlay.querySelector('#rs-err');
+                    errEl.textContent = 'All fields are required.';
+                    errEl.style.display = 'block';
+                    return;
+                  }
+                  try {
+                    await API.put(`/events/requests/${id}/resubmit`, {
+                      title, venue, description: desc,
+                  category: r.category, event_type: r.event_type,
+                  department_id: r.department_id, club_id: r.club_id,
+                  proposed_date: r.proposed_date, start_time: r.start_time, end_time: r.end_time,
+                  expected_participants: r.expected_participants,
+                  required_facilities: r.required_facilities,
+                  estimated_budget: r.estimated_budget,
+                  faculty_coordinator_id: r.faculty_coordinator_id,                      rules: r.rules, eligibility: r.eligibility, contact_details: r.contact_details,
+                    });
+                    close();
+                    UI.toast('Request updated and resubmitted', 'success');
+                    load();
+                  } catch (err) {
+                    const errEl = overlay.querySelector('#rs-err');
+                    errEl.textContent = err.message;
+                    errEl.style.display = 'block';
+                  }
+                });
+              } catch (err) { UI.toast(err.message, 'error'); }
+            });
+          });
+        } catch (err) {
+          box.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        }
+      }
+      load();
+    })();
+  </script>
+</body>
+</html>

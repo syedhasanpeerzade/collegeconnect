@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Feed - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/social.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+
+  <div class="social-shell">
+    <aside class="social-sidebar"><nav class="snav" id="snav"></nav></aside>
+
+    <main>
+      <div class="feed-hero">
+        <div>
+          <h1>College <span class="brand-dot">Connect</span></h1>
+          <p>What's happening on campus today?</p>
+        </div>
+        <a class="btn btn-secondary btn-sm" href="/search.html">&#128269; Search campus</a>
+      </div>
+
+      <div class="card composer" id="composer">
+        <form id="post-form">
+          <div class="composer-row">
+            <span class="post-avatar" id="composer-ava">?</span>
+            <div class="composer-main">
+              <button type="button" class="composer-trigger" id="composer-trigger">What’s happening on campus?</button>
+              <input class="composer-title" id="post-title" placeholder="Question title" maxlength="150">
+              <textarea id="post-text" placeholder="Share something with campus…" maxlength="4000"></textarea>
+
+              <div class="composer-panel" id="composer-panel">
+                <div class="poll-builder" id="poll-builder">
+                  <input type="text" id="poll-q" placeholder="Ask a poll question…" maxlength="200">
+                  <div class="poll-options" id="poll-options">
+                    <div class="poll-opt-row"><input type="text" class="poll-opt-input" placeholder="Option 1" maxlength="80"><button type="button" class="poll-rm" aria-label="Remove option" disabled>&#10005;</button></div>
+                    <div class="poll-opt-row"><input type="text" class="poll-opt-input" placeholder="Option 2" maxlength="80"><button type="button" class="poll-rm" aria-label="Remove option" disabled>&#10005;</button></div>
+                  </div>
+                  <button type="button" class="add-poll-opt" id="add-poll-opt">+ Add option</button>
+                  <div class="poll-limit" id="poll-limit"></div>
+                </div>
+
+                <div class="composer-attach">
+                  <input type="file" id="post-image" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none">
+                  <input type="file" id="post-video" accept="video/mp4,video/webm,video/quicktime" style="display:none">
+                  <div class="composer-media-preview" id="post-media-preview"></div>
+                  <div class="composer-hint" id="attach-hint"></div>
+                  <div class="upload-progress" id="post-progress">
+                    <span class="up-bar"><span class="up-fill" id="post-progress-fill" style="width:0%"></span></span>
+                    <span class="up-pct" id="post-progress-pct">0%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="composer-toolbar">
+            <div class="composer-tools">
+              <button type="button" class="tool-btn on" data-kind="POST" aria-pressed="true">&#9997;&#65039; Post</button>
+              <button type="button" class="tool-btn" data-kind="QUESTION" aria-pressed="false">&#10067; Question</button>
+              <button type="button" class="tool-btn" data-kind="POLL" aria-pressed="false">&#128202; Poll</button>
+              <span class="tool-sep" aria-hidden="true"></span>
+              <button type="button" class="tool-btn" id="btn-image" title="Add a photo">&#128247; Photo</button>
+              <button type="button" class="tool-btn" id="btn-video" title="Add a video">&#127916; Video</button>
+              <button type="button" class="tool-btn" id="btn-hashtag" title="Insert hashtag">#</button>
+            </div>
+            <div class="composer-actions">
+              <select id="post-community" class="community-select" aria-label="Post to community">
+                <option value="">No community</option>
+              </select>
+              <label class="anon-toggle" title="Your identity stays private — the server hides it">
+                <input type="checkbox" id="post-anon">
+                <span class="anon-track" aria-hidden="true"><span class="anon-thumb"></span></span>
+                <span class="anon-label">&#128373;&#65039; Anonymous</span>
+              </label>
+              <button class="btn post-submit" type="submit" id="post-submit">Post</button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <div class="feed-tabs" id="feed-tabs">
+        <button data-tab="foryou" class="active">For You</button>
+        <button data-tab="following">Following</button>
+        <button data-tab="trending">Trending &#128293;</button>
+        <button data-tab="official">Official &#10003;</button>
+      </div>
+
+      <div id="feed"><div class="loading">Loading feed...</div></div>
+      <div class="load-more-wrap"><button class="btn btn-secondary" id="load-more" style="display:none">Load more</button></div>
+    </main>
+
+    <aside class="social-rail">
+      <div class="card rail-card" id="rail-poll-card" style="display:none">
+        <h3>&#128202; Daily campus poll</h3>
+        <div class="rail-list" id="rail-poll"></div>
+      </div>
+      <div class="card rail-card">
+        <h3>&#128293; Trending discussions</h3>
+        <div class="rail-list" id="rail-discussions"><div class="skeleton w80"></div><div class="skeleton w60"></div><div class="skeleton w40"></div></div>
+      </div>
+      <div class="card rail-card">
+        <h3>&#128197; Upcoming events</h3>
+        <div class="rail-list" id="rail-events"><div class="skeleton w80"></div><div class="skeleton w60"></div></div>
+      </div>
+      <div class="card rail-card">
+        <h3>&#128227; Official announcements</h3>
+        <div class="rail-list" id="rail-announcements"><div class="skeleton w80"></div><div class="skeleton w60"></div></div>
+      </div>
+      <div class="card rail-card">
+        <h3>&#10024; Suggested for you</h3>
+        <div class="rail-list" id="rail-people"></div>
+      </div>
+      <div class="card rail-card">
+        <h3>&#128101; Popular communities</h3>
+        <div class="rail-list" id="rail-communities"><div class="skeleton w80"></div><div class="skeleton w60"></div></div>
+      </div>
+      <div class="card rail-card">
+        <h3>&#127942; Recent achievements</h3>
+        <div class="rail-list" id="rail-achievements"><div class="skeleton w60"></div></div>
+      </div>
+      <div class="card rail-card">
+        <h3>Trending on campus</h3>
+        <div class="chip-row" id="rail-tags"></div>
+      </div>
+      <div class="card rail-card" style="font-size:12.5px;color:var(--muted)">
+        🕵️ Anonymous posts hide your identity from everyone — enforced on the server, not just hidden in the UI.
+      </div>
+    </aside>
+  </div>
+
+  <button class="fab-create" id="fab-create" type="button" aria-label="Create post" title="Create"><span>&#43;</span></button>
+  <div class="create-menu" id="create-menu" role="menu" aria-label="Create">
+    <button type="button" role="menuitem" data-create="POST" style="--d:0ms"><span class="cm-ic">&#9997;&#65039;</span><span class="cm-tx"><b>Post</b><span>Share a text update</span></span></button>
+    <button type="button" role="menuitem" data-create="QUESTION" style="--d:40ms"><span class="cm-ic">&#10067;</span><span class="cm-tx"><b>Question</b><span>Ask campus something</span></span></button>
+    <button type="button" role="menuitem" data-create="POLL" style="--d:80ms"><span class="cm-ic">&#128202;</span><span class="cm-tx"><b>Poll</b><span>Get quick opinions</span></span></button>
+    <button type="button" role="menuitem" data-create="PHOTO" style="--d:120ms"><span class="cm-ic">&#128247;</span><span class="cm-tx"><b>Photo</b><span>Add an image</span></span></button>
+    <button type="button" role="menuitem" data-create="VIDEO" style="--d:160ms"><span class="cm-ic">&#127916;</span><span class="cm-tx"><b>Video</b><span>Add a video clip</span></span></button>
+  </div>
+
+  <nav class="mobile-tabbar" id="tabbar"></nav>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/social.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      const user = Auth.user(); // feed is public; auth personalizes it
+      Social.chrome('/feed.html');
+
+      /* ---------- Right rail ---------- */
+      Social.mountDiscover({
+        discussions: document.getElementById('rail-discussions'),
+        events: document.getElementById('rail-events'),
+        communities: document.getElementById('rail-communities'),
+        people: document.getElementById('rail-people'),
+        tags: document.getElementById('rail-tags'),
+        poll: document.getElementById('rail-poll'),
+        achievements: document.getElementById('rail-achievements'),
+      }).then(() => {
+        const box = document.getElementById('rail-poll');
+        if (box && box.innerHTML.trim()) document.getElementById('rail-poll-card').style.display = '';
+      });
+
+      /* ---------- Composer ---------- */
+      let kind = 'POST';
+      const composerEl = document.getElementById('composer');
+      const trigger = document.getElementById('composer-trigger');
+      const titleInput = document.getElementById('post-title');
+      const textInput = document.getElementById('post-text');
+      const pollBuilder = document.getElementById('poll-builder');
+      const pollOptions = document.getElementById('poll-options');
+      const addPollOpt = document.getElementById('add-poll-opt');
+      const pollLimit = document.getElementById('poll-limit');
+      const attachHint = document.getElementById('attach-hint');
+      const kindBtns = document.querySelectorAll('.composer-toolbar .tool-btn[data-kind]');
+
+      // The composer stays compact until the user engages with it. Only the
+      // fields relevant to the active post type are ever shown.
+      function expandComposer() { composerEl.classList.add('expanded'); }
+      function collapseComposer() {
+        if (textInput.value.trim() || titleInput.value.trim() ||
+            document.getElementById('post-image').files[0] ||
+            document.getElementById('post-video').files[0] ||
+            document.getElementById('poll-q').value.trim() ||
+            [...pollOptions.querySelectorAll('.poll-opt-input')].some((i) => i.value.trim())) return;
+        composerEl.classList.remove('expanded');
+      }
+      trigger.addEventListener('click', expandComposer);
+
+      function setKind(k) {
+        kind = k;
+        kindBtns.forEach((b) => {
+          const on = b.dataset.kind === k;
+          b.classList.toggle('on', on);
+          b.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+        titleInput.classList.toggle('visible', k === 'QUESTION');
+        pollBuilder.classList.toggle('open', k === 'POLL');
+        expandComposer();
+      }
+      kindBtns.forEach((b) => b.addEventListener('click', () => setKind(b.dataset.kind)));
+      document.getElementById('btn-image').addEventListener('click', () => document.getElementById('post-image').click());
+      document.getElementById('btn-video').addEventListener('click', () => document.getElementById('post-video').click());
+      // Inserting a hashtag is just a convenience: it puts " #" in the text.
+      document.getElementById('btn-hashtag').addEventListener('click', () => {
+        const t = document.getElementById('post-text');
+        t.setRangeText('#', t.selectionStart, t.selectionEnd, 'end');
+        t.focus();
+      });
+
+      /* Media preview: thumbnail with a remove button before publishing. */
+      const IMG_MAX_MB = 5;
+      const VID_MAX_MB = 50;
+      const IMG_OK = /^image\/(jpeg|png|webp|gif)$/;
+      const VID_OK = /^(video|application)\/(mp4|webm|quicktime|x-matroska)/;
+      function renderMediaPreview() {
+        const box = document.getElementById('post-media-preview');
+        const img = document.getElementById('post-image').files[0];
+        const vid = document.getElementById('post-video').files[0];
+        const chips = [];
+        if (img) {
+          chips.push(`<div class="cm-chip">
+            <img src="${URL.createObjectURL(img)}" alt="${UI.esc(img.name)}">
+            <button type="button" class="cm-rm" data-rm="image" aria-label="Remove image">&#10005;</button>
+          </div>`);
+        }
+        if (vid) {
+          chips.push(`<div class="cm-chip video">
+            <video src="${URL.createObjectURL(vid)}" muted></video>
+            <button type="button" class="cm-rm" data-rm="video" aria-label="Remove video">&#10005;</button>
+          </div>`);
+        }
+        box.innerHTML = chips.join('');
+        box.classList.toggle('visible', chips.length > 0);
+        box.querySelectorAll('[data-rm]').forEach((btn) => btn.addEventListener('click', () => {
+          document.getElementById(btn.dataset.rm === 'image' ? 'post-image' : 'post-video').value = '';
+          renderMediaPreview();
+        }));
+        const hints = [];
+        if (img) hints.push(`\uD83D\uDCF7 ${UI.esc(img.name)} \u00B7 ${(img.size / 1048576).toFixed(1)} MB \u00B7 preview keeps the full image, uncropped`);
+        if (vid) hints.push(`\uD83C\uDFAC ${UI.esc(vid.name)} \u00B7 ${(vid.size / 1048576).toFixed(1)} MB \u00B7 MP4, WebM or MOV under ${VID_MAX_MB} MB`);
+        attachHint.innerHTML = hints.join('<br>');
+        attachHint.classList.toggle('visible', hints.length > 0);
+      }
+      function validateMedia() {
+        const img = document.getElementById('post-image').files[0];
+        const vid = document.getElementById('post-video').files[0];
+        if (img && !IMG_OK.test(img.type)) { UI.toast('Images must be JPEG, PNG, WebP or GIF.', 'error'); document.getElementById('post-image').value = ''; renderMediaPreview(); return false; }
+        if (img && img.size > IMG_MAX_MB * 1048576) { UI.toast(`Image must be under ${IMG_MAX_MB} MB.`, 'error'); document.getElementById('post-image').value = ''; renderMediaPreview(); return false; }
+        if (vid && !VID_OK.test(vid.type)) { UI.toast('Videos must be MP4, WebM or MOV.', 'error'); document.getElementById('post-video').value = ''; renderMediaPreview(); return false; }
+        if (vid && vid.size > VID_MAX_MB * 1048576) { UI.toast(`Video must be under ${VID_MAX_MB} MB.`, 'error'); document.getElementById('post-video').value = ''; renderMediaPreview(); return false; }
+        return true;
+      }
+      document.getElementById('post-image').addEventListener('change', () => { if (validateMedia()) renderMediaPreview(); });
+      document.getElementById('post-video').addEventListener('change', () => { if (validateMedia()) renderMediaPreview(); });
+      /* ---------- Create menu (FAB + bottom-nav plus) ---------- */
+      const createMenu = document.getElementById('create-menu');
+      function closeCreateMenu() { createMenu.classList.remove('open'); }
+      function openCreateMenu() {
+        createMenu.classList.remove('open');
+        void createMenu.offsetWidth; // replay the staggered item reveal
+        createMenu.classList.add('open');
+      }
+      function focusComposer() {
+        const startY = window.scrollY;
+        composerEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(() => {
+          if (Math.abs(window.scrollY - startY) < 4) composerEl.scrollIntoView({ block: 'center' });
+        }, 420);
+        composerEl.classList.remove('pulse');
+        void composerEl.offsetWidth;
+        composerEl.classList.add('pulse');
+        const t = document.getElementById('post-text');
+        if (t) setTimeout(() => t.focus({ preventScroll: true }), 220);
+      }
+      Social._onCreate = openCreateMenu;
+      document.getElementById('fab-create').addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!user) { location.href = '/login.html?next=%2Ffeed.html'; return; }
+        if (createMenu.classList.contains('open')) closeCreateMenu(); else openCreateMenu();
+      });
+      createMenu.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-create]');
+        if (!btn) return;
+        const pick = btn.dataset.create;
+        closeCreateMenu();
+        if (pick === 'PHOTO' || pick === 'VIDEO') {
+          setKind('POST');
+          focusComposer();
+          setTimeout(() => document.getElementById(pick === 'PHOTO' ? 'post-image' : 'post-video').click(), 300);
+          return;
+        }
+        setKind(pick);
+        focusComposer();
+      });
+      document.addEventListener('click', (e) => {
+        // Anywhere else closes the menu — but not the buttons that open it (the
+        // bottom-nav plus reports through Social._onCreate, not our own listener).
+        if (e.target.closest('#create-menu') || e.target.closest('#fab-create') || e.target.closest('.create-btn')) return;
+        closeCreateMenu();
+      });
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCreateMenu(); });
+
+      function syncPollControls() {
+        const rows = [...pollOptions.querySelectorAll('.poll-opt-row')];
+        rows.forEach((row, i) => {
+          const input = row.querySelector('.poll-opt-input');
+          const rm = row.querySelector('.poll-rm');
+          input.placeholder = `Option ${i + 1}${i > 1 ? ' (optional)' : ''}`;
+          rm.disabled = rows.length <= 2;
+        });
+        const full = rows.length >= 6;
+        addPollOpt.style.display = full ? 'none' : '';
+        pollLimit.style.display = full ? '' : 'none';
+        pollLimit.textContent = 'Polls allow up to 6 options.';
+      }
+      addPollOpt.addEventListener('click', () => {
+        const rows = pollOptions.querySelectorAll('.poll-opt-row').length;
+        if (rows >= 6) { UI.toast('Polls allow at most 6 options', 'error'); return; }
+        const row = document.createElement('div');
+        row.className = 'poll-opt-row';
+        row.innerHTML = `<input type="text" class="poll-opt-input" placeholder="Option ${rows + 1}" maxlength="80"><button type="button" class="poll-rm" aria-label="Remove option">&#10005;</button>`;
+        pollOptions.appendChild(row);
+        row.querySelector('.poll-opt-input').focus();
+        syncPollControls();
+      });
+      // Remove buttons live on every row; only enabled once more than 2 options exist.
+      pollOptions.addEventListener('click', (e) => {
+        const rm = e.target.closest('.poll-rm');
+        if (!rm || rm.disabled) return;
+        rm.closest('.poll-opt-row').remove();
+        syncPollControls();
+      });
+      // A poll always starts with exactly two fresh option rows.
+      function resetPollOptions() {
+        pollOptions.innerHTML = '';
+        for (let i = 0; i < 2; i++) {
+          const row = document.createElement('div');
+          row.className = 'poll-opt-row';
+          row.innerHTML = `<input type="text" class="poll-opt-input" placeholder="Option ${i + 1}" maxlength="80"><button type="button" class="poll-rm" aria-label="Remove option" disabled>&#10005;</button>`;
+          pollOptions.appendChild(row);
+        }
+        syncPollControls();
+      }
+      syncPollControls();
+
+      const ava = document.getElementById('composer-ava');
+      ava.textContent = user ? user.full_name.charAt(0).toUpperCase() : '?';
+      if (user) ava.title = user.full_name;
+      if (!user) {
+        document.getElementById('post-submit').addEventListener('click', (e) => {
+          e.preventDefault();
+          location.href = '/login.html?next=%2Ffeed.html';
+        });
+      }
+
+      /* ---------- Communities dropdown ---------- */
+      try {
+        const res = await API.get('/social/communities');
+        const communities = res.data || [];
+        document.getElementById('post-community').innerHTML =
+          '<option value="">No community</option>' +
+          communities.map((c) => `<option value="${c.id}">${UI.esc(c.name)}</option>`).join('');
+      } catch (_e) { /* composer still works without a community list */ }
+
+      /* ---------- Feed ---------- */
+      const feedEl = document.getElementById('feed');
+      const loadMoreBtn = document.getElementById('load-more');
+      let tab = 'foryou';
+      let page = 1;
+      let hasMore = false;
+
+      const EMPTY_COPY = {
+        foryou: ['Nothing here yet', 'Be the first to post something for campus.'],
+        following: ['Your following feed is quiet', 'Follow people from their profiles, or join a community, to see their posts here.'],
+        trending: ['No trending posts yet', 'Engagement builds over time — like and comment to get things moving.'],
+        official: ['No official updates yet', 'Verified college and club accounts will appear here.'],
+      };
+
+      async function loadFeed(reset = true) {
+        if (reset) {
+          page = 1;
+          feedEl.classList.remove('swapping');
+          void feedEl.offsetWidth;
+          feedEl.classList.add('swapping');
+          feedEl.innerHTML = '<div class="card"><div class="skeleton block"></div><div class="skeleton w60"></div><div class="skeleton w40"></div></div>';
+        }
+        try {
+          const res = await API.get(`/social/feed?tab=${tab}&page=${page}`);
+          const rows = res.data.rows;
+          hasMore = res.data.hasMore;
+          if (reset && !rows.length) {
+            const [t, sub] = EMPTY_COPY[tab] || EMPTY_COPY.foryou;
+            feedEl.innerHTML = UI.empty(t, sub);
+          } else {
+            feedEl.innerHTML = (reset ? '' : feedEl.innerHTML) + rows.map((p, i) => Social.card(p, user, i)).join('');
+          }
+          loadMoreBtn.style.display = hasMore ? 'inline-flex' : 'none';
+        } catch (err) {
+          if (err.status === 401) {
+            feedEl.innerHTML = UI.empty('Log in to see your Following feed', '<a href="/login.html?next=%2Ffeed.html">Log in</a>');
+          } else {
+            feedEl.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+          }
+        }
+      }
+
+      // The pill indicator slides between tabs; Social.tabs owns the active state.
+      const tabsApi = Social.tabs(document.getElementById('feed-tabs'), (btn) => {
+        tab = btn.dataset.tab;
+        loadFeed();
+      });
+      loadMoreBtn.addEventListener('click', () => { page += 1; loadFeed(false); });
+      Social.bindInteractions(feedEl);
+
+      /* ---------- Create post (guarded against double submission) ---------- */
+      let submitting = false;
+      const progressEl = document.getElementById('post-progress');
+      const progressFill = document.getElementById('post-progress-fill');
+      const progressPct = document.getElementById('post-progress-pct');
+      function showProgress(pct) {
+        progressEl.style.display = 'flex';
+        progressFill.style.width = `${pct}%`;
+        progressPct.textContent = `${pct}%`;
+      }
+      function hideProgress() { progressEl.style.display = 'none'; progressFill.style.width = '0%'; progressPct.textContent = '0%'; }
+
+      document.getElementById('post-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!user) { location.href = '/login.html?next=%2Ffeed.html'; return; }
+        if (submitting) return; // ignore rapid double-clicks / key repeats
+        const btn = document.getElementById('post-submit');
+        const text = document.getElementById('post-text').value.trim();
+        if (!text) { UI.toast('Write something first', 'error'); return; }
+        if (!validateMedia()) return;
+        const fd = new FormData();
+        fd.append('kind', kind);
+        fd.append('content', text);
+        if (kind === 'QUESTION' && titleInput.value.trim()) fd.append('title', titleInput.value.trim());
+        if (document.getElementById('post-anon').checked) fd.append('is_anonymous', '1');
+        const commSel = document.getElementById('post-community');
+        if (commSel.value) fd.append('community_id', commSel.value);
+        const img = document.getElementById('post-image').files[0];
+        const vid = document.getElementById('post-video').files[0];
+        if (img) fd.append('image', img);
+        if (vid) fd.append('video', vid);
+        if (kind === 'POLL') {
+          const q = document.getElementById('poll-q').value.trim();
+          const opts = [...pollBuilder.querySelectorAll('.poll-opt-input')].map((i) => i.value.trim()).filter(Boolean);
+          if (!q || opts.length < 2) { UI.toast('Polls need a question and at least 2 options', 'error'); return; }
+          fd.append('poll_question', q);
+          fd.append('poll_options', JSON.stringify(opts));
+        }
+        submitting = true;
+        btn.disabled = true; btn.textContent = 'Posting...';
+        const hasFiles = !!(img || vid);
+        if (hasFiles) showProgress(0);
+        try {
+          if (hasFiles) {
+            await API.postFormProgress('/social/posts', fd, (pct) => {
+              showProgress(pct);
+              btn.textContent = `Uploading ${pct}%`;
+            });
+          } else {
+            await API.postForm('/social/posts', fd);
+          }
+          UI.toast('Posted!', 'success');
+          textInput.value = '';
+          titleInput.value = '';
+          document.getElementById('poll-q').value = '';
+          resetPollOptions();
+          document.getElementById('post-anon').checked = false;
+          document.getElementById('post-image').value = '';
+          document.getElementById('post-video').value = '';
+          renderMediaPreview();
+          hideProgress();
+          setKind('POST');
+          composerEl.classList.remove('expanded');
+          tab = 'foryou';
+          document.querySelectorAll('#feed-tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === 'foryou'));
+          tabsApi.refresh();
+          loadFeed();
+        } catch (err) {
+          UI.toast(err.message, 'error');
+          hideProgress();
+        }
+        btn.disabled = false; btn.textContent = 'Post';
+        submitting = false;
+      });
+
+      /* ---------- Official announcements rail ---------- */
+      (async () => {
+        const el = document.getElementById('rail-announcements');
+        try {
+          const res = await API.get('/announcements');
+          const rows = (res.data || []).slice(0, 5);
+          el.innerHTML = rows.length ? rows.map((a) => `
+            <a class="rail-item" href="/announcements.html">
+              <span><b>${UI.esc(a.title.slice(0, 40))}</b>
+                <div class="ri-meta">${UI.fmtDate(a.published_at || a.created_at)}</div></span>
+            </a>`).join('') : '<div class="ri-meta" style="padding:4px 8px">No announcements yet.</div>';
+        } catch (_e) {
+          el.innerHTML = '<div class="ri-meta" style="padding:4px 8px">Unavailable right now.</div>';
+        }
+      })();
+
+      /* ---------- Deep link ?post=ID ---------- */
+      const wantPost = new URLSearchParams(location.search).get('post');
+      await loadFeed();
+      if (wantPost) {
+        const card = feedEl.querySelector(`[data-post="${wantPost}"]`);
+        if (card) {
+          Social.openComments(wantPost, card.querySelector('[data-comments-wrap]'));
+          // Smooth scrolling is unreliable in some embedded browsers: fall back to an
+          // instant jump if the animated scroll never started.
+          const startY = window.scrollY;
+          card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          setTimeout(() => {
+            if (Math.abs(window.scrollY - startY) < 4) card.scrollIntoView({ block: 'center' });
+          }, 450);
+        }
+      }
+
+      // Tell the server which posts are worth showing in Trending (view signal is
+      // intentionally NOT used — engagement comes from real reactions/comments).
+      if (hasMore) loadMoreBtn.style.display = 'inline-flex';
+    })();
+  </script>
+</body>
+</html>

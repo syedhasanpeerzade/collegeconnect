@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Organizer Dashboard - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+  <div class="container">
+    <div class="page-head">
+      <div>
+        <h1>Organizer Workspace</h1>
+        <div class="sub">Propose events, track approvals and manage your registrations.</div>
+      </div>
+      <a class="btn" href="/event-request.html">New Event Proposal</a>
+    </div>
+    <div id="stat-cards" class="grid grid-4" style="margin-bottom:20px"></div>
+
+    <div class="grid grid-2">
+      <div class="card">
+        <h3>My event requests <a class="card-link" href="/organizer/event-requests.html" style="float:right">Open</a></h3>
+        <p style="color:var(--ink-soft);font-size:14px">Submit proposals, read reviewer remarks, and resubmit when changes are requested.</p>
+        <a class="btn btn-secondary btn-sm" href="/organizer/event-requests.html">View requests</a>
+      </div>
+      <div class="card">
+        <h3>Registration lists</h3>
+        <p style="color:var(--ink-soft);font-size:14px">Download the list of students registered for each of your events.</p>
+        <a class="btn btn-secondary btn-sm" href="/events.html">My published events</a>
+      </div>
+    </div>
+  </div>
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      const user = Auth.requireRole(['ORGANIZER', 'ADMIN']);
+      if (!user) return;
+      try {
+        const [reqs, regs] = await Promise.all([
+          API.get('/events/requests?mine=1'),
+          API.get('/events/my-registrations'),
+        ]);
+        const rows = reqs.data || [];
+        const count = (s) => rows.filter((r) => r.status === s).length;
+        document.getElementById('stat-cards').innerHTML = [
+          ['Total Requests', rows.length],
+          ['Pending', count('PENDING')],
+          ['Approved', count('APPROVED')],
+          ['Changes Requested', count('CHANGES_REQUESTED')],
+        ].map(([label, v]) => `
+          <div class="card stat-card">
+            <span class="stat-label">${label}</span>
+            <span class="stat-value">${v}</span>
+          </div>`).join('');
+      } catch (err) {
+        document.getElementById('stat-cards').innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+      }
+    })();
+  </script>
+</body>
+</html>
