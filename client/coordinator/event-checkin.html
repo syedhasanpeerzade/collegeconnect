@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Event Entry & Verification - CollegeConnect</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <style>
+    .scanner-controls {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+    .stats-progress-wrap {
+      margin-top: 8px;
+    }
+    .checkin-feed-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line-soft);
+      font-size: 13.5px;
+    }
+    .checkin-feed-item:last-child { border-bottom: none; }
+    .badge-scan-status {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 999px;
+      text-transform: uppercase;
+    }
+    .badge-scan-status.SUCCESS { background: var(--ok-soft); color: var(--ok); }
+    .badge-scan-status.ALREADY_CHECKED_IN { background: var(--danger-soft); color: var(--danger); }
+    .badge-scan-status.WRONG_EVENT { background: var(--warn-soft); color: var(--warn); }
+    .badge-scan-status.INVALID { background: var(--danger-soft); color: var(--danger); }
+  </style>
+</head>
+<body>
+  <nav id="app-nav"></nav>
+
+  <div class="container">
+    <div class="page-head">
+      <div>
+        <h1>Event Entry &amp; Ticket Verification</h1>
+        <div class="sub">Verify student QR passes, manage entrance check-ins, and track live attendance.</div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <a class="btn btn-secondary" href="/coordinator/index.html">Coordinator Workspace</a>
+        <button class="btn btn-secondary" id="export-csv-btn" style="display:none">&#128190; Export Attendee CSV</button>
+      </div>
+    </div>
+
+    <!-- Event Selector Card -->
+    <div class="card" style="margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+        <div style="flex:1;min-width:240px">
+          <label for="event-select" style="font-weight:600;font-size:13.5px;margin-bottom:6px;display:block">Select Event to Verify Entrance:</label>
+          <select id="event-select" style="width:100%;padding:10px 14px;border-radius:var(--radius-sm);border:1px solid var(--line);font-size:15px;background:var(--card)">
+            <option value="">-- Choose an assigned event --</option>
+          </select>
+        </div>
+        <div id="event-quick-info" style="font-size:13px;color:var(--ink-soft);padding-top:20px"></div>
+      </div>
+    </div>
+
+    <!-- Main Workspace (Visible once event selected) -->
+    <div id="checkin-workspace" style="display:none">
+      
+      <!-- Live Attendance Statistics -->
+      <div class="grid grid-4" style="margin-bottom:20px">
+        <div class="card stat-card">
+          <span class="stat-label">Total Registered</span>
+          <span class="stat-value" id="stat-registered">0</span>
+        </div>
+        <div class="card stat-card">
+          <span class="stat-label">Checked In</span>
+          <span class="stat-value" id="stat-checked" style="color:var(--ok)">0</span>
+        </div>
+        <div class="card stat-card">
+          <span class="stat-label">Remaining</span>
+          <span class="stat-value" id="stat-remaining" style="color:var(--primary)">0</span>
+        </div>
+        <div class="card stat-card">
+          <span class="stat-label">Attendance Rate</span>
+          <span class="stat-value" id="stat-pct">0%</span>
+          <div class="attendance-progress-bar">
+            <div class="attendance-progress-fill" id="stat-progress" style="width:0%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Two Column Layout: Left Scanner & Code Input, Right Live Results -->
+      <div class="grid grid-2" style="margin-bottom:24px">
+        
+        <!-- Left: QR Camera Scanner & Manual Input -->
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+            <h3 style="margin:0">&#128247; Entrance Scanner</h3>
+            <span class="badge" id="camera-status-badge">Ready</span>
+          </div>
+
+          <!-- Video Element for Camera Scan -->
+          <div class="scanner-video-wrap" id="video-container">
+            <video id="scanner-video" playsinline></video>
+            <div class="scanner-overlay-box">
+              <div class="scanner-laser"></div>
+            </div>
+            <div id="scanner-fallback-msg" style="position:absolute;color:#fff;text-align:center;padding:16px;display:none;background:rgba(0,0,0,0.85);border-radius:10px">
+              Camera access not active.<br>Click "Start Camera" or enter ticket code below.
+            </div>
+          </div>
+
+          <!-- Scanner controls -->
+          <div class="scanner-controls">
+            <button class="btn btn-sm" id="toggle-camera-btn">&#9654; Start Camera Scanner</button>
+            <button class="btn btn-sm btn-secondary" id="flip-camera-btn" style="display:none">&#128257; Switch Camera</button>
+          </div>
+
+          <div style="text-align:center;color:var(--muted);font-size:12px;margin-bottom:14px">&mdash; OR ENTER CODE MANUALLY &mdash;</div>
+
+          <!-- Manual Ticket Code Input -->
+          <form id="manual-verify-form" style="display:flex;gap:8px">
+            <input type="text" id="manual-ticket-code" placeholder="e.g. CC-TKT-12-1-A9F2" style="flex:1;text-transform:uppercase;font-family:monospace;font-size:14px" autocomplete="off" required>
+            <button type="submit" class="btn" id="manual-verify-btn">Verify Ticket</button>
+          </form>
+        </div>
+
+        <!-- Right: Verification Result & Entry Confirmation -->
+        <div class="card" style="display:flex;flex-direction:column">
+          <h3 style="margin-bottom:12px">&#128203; Verification Result</h3>
+
+          <div id="verification-result-box" style="flex:1;display:flex;align-items:center;justify-content:center">
+            <div style="text-align:center;color:var(--muted);padding:30px 16px">
+              <div style="font-size:36px;margin-bottom:10px">&#127915;</div>
+              <div style="font-weight:600;font-size:15px;color:var(--ink)">Awaiting ticket scan or code input</div>
+              <div style="font-size:13px;margin-top:4px">Scan attendee QR code or type their ticket code to verify.</div>
+            </div>
+          </div>
+
+          <!-- Recent Scans Log -->
+          <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px">
+            <h4 style="font-size:13px;color:var(--muted);text-transform:uppercase;margin-bottom:8px">Recent Scans Feed</h4>
+            <div id="recent-scans-feed" style="max-height:160px;overflow-y:auto">
+              <div style="font-size:12.5px;color:var(--muted);text-align:center;padding:10px">No recent scans yet for this session.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Registered Attendees List -->
+      <div class="card section">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px">
+          <div>
+            <h3 style="margin:0">Event Attendee List</h3>
+            <div style="font-size:13px;color:var(--ink-soft)">Complete roster of registered students and their check-in status.</div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <input type="text" id="attendee-search" placeholder="Search name, reg no, code..." style="padding:6px 12px;font-size:13.5px;border:1px solid var(--line);border-radius:var(--radius-sm);width:220px">
+            <select id="attendee-status-filter" style="padding:6px 12px;font-size:13.5px;border:1px solid var(--line);border-radius:var(--radius-sm)">
+              <option value="">All Statuses</option>
+              <option value="CHECKED_IN">Checked In</option>
+              <option value="VALID">Not Checked In</option>
+              <option value="CANCELLED">Cancelled</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="attendees-table-wrap"><div class="loading">Loading attendees...</div></div>
+      </div>
+    </div>
+  </div>
+
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      const user = Auth.requireRole(['CLUB_COORDINATOR', 'ORGANIZER', 'FACULTY', 'ADMIN', 'STUDENT']);
+      if (!user) return;
+
+      const eventSelect = document.getElementById('event-select');
+      const eventQuickInfo = document.getElementById('event-quick-info');
+      const workspace = document.getElementById('checkin-workspace');
+      const exportBtn = document.getElementById('export-csv-btn');
+      const resultBox = document.getElementById('verification-result-box');
+      const feedBox = document.getElementById('recent-scans-feed');
+
+      let currentEventId = null;
+      let assignedEvents = [];
+      let videoStream = null;
+      let barcodeDetector = null;
+      let scanInterval = null;
+      let facingMode = 'environment';
+      let lastScannedCode = null;
+      let lastScanTimestamp = 0;
+
+      // 1. Load coordinator events
+      try {
+        const res = await API.get('/tickets/coordinator/events');
+        assignedEvents = res.data || [];
+        if (!assignedEvents.length) {
+          eventSelect.innerHTML = '<option value="">No events assigned to you</option>';
+          eventQuickInfo.innerHTML = '<span style="color:var(--danger)">You have no assigned events to coordinate. Contact an administrator.</span>';
+          return;
+        }
+
+        eventSelect.innerHTML = '<option value="">-- Select an event to coordinate --</option>' +
+          assignedEvents.map((e) => `<option value="${e.id}">${UI.esc(e.title)} (${UI.fmtDate(e.event_date)})</option>`).join('');
+
+        // If URL has ?eventId=, auto-select
+        const params = new URLSearchParams(location.search);
+        const qEventId = params.get('eventId');
+        if (qEventId && assignedEvents.some((x) => x.id === Number(qEventId))) {
+          eventSelect.value = qEventId;
+          onEventSelected(qEventId);
+        }
+      } catch (err) {
+        UI.toast(err.message, 'error');
+      }
+
+      eventSelect.addEventListener('change', () => {
+        const val = eventSelect.value;
+        if (!val) {
+          workspace.style.display = 'none';
+          exportBtn.style.display = 'none';
+          currentEventId = null;
+          stopCamera();
+          return;
+        }
+        onEventSelected(val);
+      });
+
+      async function onEventSelected(eventId) {
+        currentEventId = Number(eventId);
+        const ev = assignedEvents.find((x) => x.id === currentEventId);
+        if (ev) {
+          eventQuickInfo.innerHTML = `<b>${UI.esc(ev.venue || 'Campus')}</b> &middot; ${UI.fmtDate(ev.event_date)} &middot; ${UI.fmtTime(ev.start_time)}`;
+        }
+        workspace.style.display = 'block';
+        exportBtn.style.display = 'inline-block';
+        resetVerificationBox();
+        await loadEventAttendees();
+      }
+
+      function resetVerificationBox() {
+        resultBox.innerHTML = `
+          <div style="text-align:center;color:var(--muted);padding:30px 16px">
+            <div style="font-size:36px;margin-bottom:10px">&#127915;</div>
+            <div style="font-weight:600;font-size:15px;color:var(--ink)">Awaiting ticket scan or code input</div>
+            <div style="font-size:13px;margin-top:4px">Scan attendee QR code or type their ticket code to verify.</div>
+          </div>`;
+      }
+
+      // 2. Load Attendees and Statistics
+      async function loadEventAttendees() {
+        if (!currentEventId) return;
+        const search = document.getElementById('attendee-search').value.trim();
+        const status = document.getElementById('attendee-status-filter').value;
+        const tableBox = document.getElementById('attendees-table-wrap');
+
+        try {
+          const res = await API.get(`/tickets/events/${currentEventId}/attendees?search=${encodeURIComponent(search)}&status=${encodeURIComponent(status)}`);
+          const data = res.data;
+
+          // Update stats counters
+          document.getElementById('stat-registered').textContent = data.stats.total_registered;
+          document.getElementById('stat-checked').textContent = data.stats.checked_in;
+          document.getElementById('stat-remaining').textContent = data.stats.remaining;
+          document.getElementById('stat-pct').textContent = `${data.stats.attendance_percentage}%`;
+          document.getElementById('stat-progress').style.width = `${data.stats.attendance_percentage}%`;
+
+          // Update recent feed
+          renderRecentFeed(data.recent_logs || []);
+
+          // Render attendees table
+          renderAttendeesTable(data.attendees || []);
+        } catch (err) {
+          tableBox.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        }
+      }
+
+      function renderRecentFeed(logs) {
+        if (!logs.length) {
+          feedBox.innerHTML = '<div style="font-size:12.5px;color:var(--muted);text-align:center;padding:10px">No recent check-ins recorded yet.</div>';
+          return;
+        }
+        feedBox.innerHTML = logs.map((l) => `
+          <div class="checkin-feed-item">
+            <div>
+              <b>${UI.esc(l.student_name || 'Attendee')}</b> <span class="mono" style="font-size:12px;color:var(--muted)">(${UI.esc(l.ticket_code || l.notes || '-')})</span>
+              <div style="font-size:11.5px;color:var(--ink-soft)">${new Date(l.scanned_at).toLocaleTimeString()} by ${UI.esc(l.coordinator_name || 'Staff')}</div>
+            </div>
+            <span class="badge-scan-status ${l.status}">${l.status.replace(/_/g, ' ')}</span>
+          </div>
+        `).join('');
+      }
+
+      function renderAttendeesTable(rows) {
+        const tableBox = document.getElementById('attendees-table-wrap');
+        if (!rows.length) {
+          tableBox.innerHTML = UI.empty('No matching attendees', 'No students found for this search filter.');
+          return;
+        }
+
+        tableBox.innerHTML = `
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th>Reg Number</th>
+                  <th>Department</th>
+                  <th>Ticket Code</th>
+                  <th>Status</th>
+                  <th>Checked In At</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows.map((r) => `
+                  <tr>
+                    <td><b>${UI.esc(r.student_name)}</b><br><span style="font-size:12px;color:var(--muted)">${UI.esc(r.student_email)}</span></td>
+                    <td class="mono">${UI.esc(r.student_reg_no || r.registration_number)}</td>
+                    <td>${UI.esc(r.department_name || '-')}</td>
+                    <td class="mono font-bold">${UI.esc(r.ticket_code || '-')}</td>
+                    <td>${UI.statusBadge(r.ticket_status || 'REGISTERED')}</td>
+                    <td>${r.checked_in_at ? UI.fmtDateTime(r.checked_in_at) : '<span style="color:var(--muted)">-</span>'}</td>
+                    <td>
+                      ${r.ticket_status === 'VALID' ? `
+                        <button class="btn btn-sm" data-quick-verify="${UI.esc(r.ticket_code)}">Verify</button>
+                      ` : r.ticket_status === 'CHECKED_IN' ? `
+                        <span style="color:var(--ok);font-size:13px;font-weight:600">&#10003; Done</span>
+                      ` : `
+                        <span style="color:var(--danger);font-size:13px">${r.ticket_status}</span>
+                      `}
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>`;
+      }
+
+      // 3. Verification Handler (Scanned or Typed)
+      async function handleVerify(ticketCode, scanMethod = 'QR_SCAN') {
+        if (!currentEventId) {
+          UI.toast('Please select an event first', 'error');
+          return;
+        }
+
+        const code = String(ticketCode).trim().toUpperCase();
+        if (!code) return;
+
+        resultBox.innerHTML = '<div class="loading" style="padding:30px">Verifying ticket against database...</div>';
+
+        try {
+          const res = await API.post('/tickets/verify', {
+            event_id: currentEventId,
+            ticket_code: code,
+          });
+
+          const d = res.data;
+
+          // Case A: VALID TICKET
+          if (d.result === 'VALID') {
+            resultBox.innerHTML = `
+              <div class="verify-alert valid" style="width:100%">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                  <span style="font-size:26px">&#9989;</span>
+                  <div>
+                    <h3 style="margin:0;color:#165B33">VALID TICKET</h3>
+                    <div style="font-size:13px;color:#2E9E5B">Verified against database. Ready for entry.</div>
+                  </div>
+                </div>
+
+                <div style="background:#fff;border-radius:8px;padding:14px;color:var(--ink);margin:12px 0;border:1px solid #C4EED0">
+                  <div style="font-size:17px;font-weight:700">${UI.esc(d.ticket.student_name)}</div>
+                  <div style="font-size:13px;color:var(--ink-soft);margin-top:2px">
+                    Reg No: <b class="mono">${UI.esc(d.ticket.student_reg_no || '-')}</b> &middot; ${UI.esc(d.ticket.department_name || '')}
+                  </div>
+                  <div style="font-size:13px;color:var(--ink-soft);margin-top:4px">
+                    Ticket Code: <span class="ticket-code-display">${UI.esc(d.ticket.ticket_code)}</span>
+                  </div>
+                  <div style="font-size:13px;margin-top:4px;color:var(--primary)">
+                    Event: <b>${UI.esc(d.ticket.event_title)}</b>
+                  </div>
+                </div>
+
+                <button class="btn btn-lg" id="confirm-entry-btn" style="width:100%;background:#2E9E5B;border-color:#2E9E5B;font-size:16px;font-weight:700"
+                        data-code="${UI.esc(d.ticket.ticket_code)}" data-id="${d.ticket.id}" data-method="${scanMethod}">
+                  &#10003; Confirm Entry
+                </button>
+              </div>`;
+
+            const confirmBtn = document.getElementById('confirm-entry-btn');
+            confirmBtn.addEventListener('click', () => handleConfirmEntry(confirmBtn.dataset.code, confirmBtn.dataset.id, confirmBtn.dataset.method));
+            return;
+          }
+
+          // Case B: ALREADY CHECKED IN
+          if (d.result === 'ALREADY_CHECKED_IN') {
+            resultBox.innerHTML = `
+              <div class="verify-alert denied" style="width:100%">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                  <span style="font-size:26px">&#9940;</span>
+                  <div>
+                    <h3 style="margin:0;color:#8A1F14">TICKET ALREADY USED &mdash; ENTRY DENIED</h3>
+                    <div style="font-size:13px">This ticket has already been checked in. Duplicate entry rejected.</div>
+                  </div>
+                </div>
+                <div style="background:#fff;border-radius:8px;padding:12px;color:var(--ink);margin-top:8px;border:1px solid #F5C6CB">
+                  <div>Attendee: <b>${UI.esc(d.ticket ? d.ticket.student_name : 'Unknown')}</b> (${UI.esc(d.ticket ? d.ticket.student_reg_no : '')})</div>
+                  <div style="margin-top:4px;color:var(--danger)">
+                    Original Entry: <b>${UI.fmtDateTime(d.checked_in_at)}</b>
+                  </div>
+                  <div style="font-size:12px;color:var(--muted)">Verified by: ${UI.esc(d.checked_in_by || 'Coordinator')}</div>
+                </div>
+              </div>`;
+            await loadEventAttendees();
+            return;
+          }
+
+          // Case C: WRONG EVENT
+          if (d.result === 'WRONG_EVENT') {
+            resultBox.innerHTML = `
+              <div class="verify-alert wrong" style="width:100%">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+                  <span style="font-size:26px">&#9888;</span>
+                  <div>
+                    <h3 style="margin:0;color:#7D5200">WRONG EVENT</h3>
+                    <div style="font-size:13px">Ticket is valid, but belongs to another event.</div>
+                  </div>
+                </div>
+                <div style="background:#fff;border-radius:8px;padding:12px;color:var(--ink);margin-top:8px;border:1px solid #FFEBAA">
+                  <div>Attendee: <b>${UI.esc(d.ticket.student_name)}</b></div>
+                  <div style="color:var(--danger);margin-top:4px">
+                    Ticket was issued for: <b>${UI.esc(d.ticket.actual_event.title)}</b>
+                  </div>
+                </div>
+              </div>`;
+            await loadEventAttendees();
+            return;
+          }
+
+          // Case D: CANCELLED TICKET
+          if (d.result === 'CANCELLED') {
+            resultBox.innerHTML = `
+              <div class="verify-alert denied" style="width:100%">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+                  <span style="font-size:26px">&#10060;</span>
+                  <div>
+                    <h3 style="margin:0;color:#8A1F14">TICKET CANCELLED &mdash; ENTRY DENIED</h3>
+                    <div style="font-size:13px">${UI.esc(d.message)}</div>
+                  </div>
+                </div>
+                ${d.ticket ? `<div style="font-size:13px;margin-top:6px">Attendee: <b>${UI.esc(d.ticket.student_name)}</b> (Cancelled: ${UI.fmtDateTime(d.ticket.cancelled_at)})</div>` : ''}
+              </div>`;
+            await loadEventAttendees();
+            return;
+          }
+
+          // Case E: INVALID TICKET
+          resultBox.innerHTML = `
+            <div class="verify-alert invalid" style="width:100%">
+              <div style="display:flex;align-items:center;gap:10px">
+                <span style="font-size:26px">&#10060;</span>
+                <div>
+                  <h3 style="margin:0;color:#8A1F14">INVALID TICKET</h3>
+                  <div style="font-size:13px">No registration or ticket found matching code "${UI.esc(code)}".</div>
+                </div>
+              </div>
+            </div>`;
+          await loadEventAttendees();
+
+        } catch (err) {
+          resultBox.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        }
+      }
+
+      // 4. Confirm Entry (Atomic Check-in on Backend)
+      async function handleConfirmEntry(ticketCode, ticketId, scanMethod) {
+        if (!currentEventId) return;
+        const btn = document.getElementById('confirm-entry-btn');
+        if (btn) btn.disabled = true;
+
+        try {
+          const res = await API.post('/tickets/confirm-entry', {
+            event_id: currentEventId,
+            ticket_code: ticketCode,
+            ticket_id: ticketId,
+            scan_method: scanMethod || 'QR_SCAN',
+          });
+
+          UI.toast(res.message, 'success');
+
+          resultBox.innerHTML = `
+            <div class="verify-alert valid" style="width:100%">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+                <span style="font-size:28px">&#9989;</span>
+                <div>
+                  <h3 style="margin:0;color:#165B33">ENTRY CONFIRMED</h3>
+                  <div style="font-size:13.5px">${UI.esc(res.data.student_name)} checked in at ${new Date(res.data.checked_in_at).toLocaleTimeString()}.</div>
+                </div>
+              </div>
+              <div style="font-size:12px;color:var(--ink-soft);margin-top:6px">
+                Ticket: <span class="mono">${UI.esc(res.data.ticket_code)}</span> &middot; Recorded by ${UI.esc(res.data.checked_in_by || user.full_name)}
+              </div>
+            </div>`;
+
+          // Refresh statistics and roster
+          await loadEventAttendees();
+
+          // Reset verification box after 4 seconds
+          setTimeout(() => {
+            if (resultBox.querySelector('.verify-alert.valid h3').textContent === 'ENTRY CONFIRMED') {
+              resetVerificationBox();
+            }
+          }, 4000);
+
+        } catch (err) {
+          UI.toast(err.message, 'error');
+          if (btn) btn.disabled = false;
+        }
+      }
+
+      // Manual verification form submit
+      document.getElementById('manual-verify-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const input = document.getElementById('manual-ticket-code');
+        const code = input.value.trim();
+        if (code) {
+          handleVerify(code, 'MANUAL_CODE');
+          input.value = '';
+        }
+      });
+
+      // Quick verify from attendee table
+      document.getElementById('attendees-table-wrap').addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-quick-verify]');
+        if (btn) {
+          handleVerify(btn.dataset.quickVerify, 'TABLE_VERIFY');
+        }
+      });
+
+      // Search & status filter inputs
+      let searchDebounce = null;
+      document.getElementById('attendee-search').addEventListener('input', () => {
+        clearTimeout(searchDebounce);
+        searchDebounce = setTimeout(loadEventAttendees, 300);
+      });
+      document.getElementById('attendee-status-filter').addEventListener('change', loadEventAttendees);
+
+      // Export CSV
+      exportBtn.addEventListener('click', () => {
+        if (!currentEventId) return;
+        const token = Auth.token();
+        window.open(`/api/tickets/events/${currentEventId}/export?token=${encodeURIComponent(token)}`, '_blank');
+      });
+
+      // 5. Camera QR Scanner Setup
+      const videoEl = document.getElementById('scanner-video');
+      const toggleCameraBtn = document.getElementById('toggle-camera-btn');
+      const flipCameraBtn = document.getElementById('flip-camera-btn');
+      const cameraStatus = document.getElementById('camera-status-badge');
+      const fallbackMsg = document.getElementById('scanner-fallback-msg');
+
+      if ('BarcodeDetector' in window) {
+        try {
+          barcodeDetector = new BarcodeDetector({ formats: ['qr_code'] });
+        } catch (_e) { barcodeDetector = null; }
+      }
+
+      async function startCamera() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          UI.alert('Camera access is not supported by your browser. Please use the manual ticket code entry below.', { title: 'Camera Unavailable' });
+          return;
+        }
+
+        try {
+          stopCamera();
+          cameraStatus.textContent = 'Starting...';
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: facingMode, width: { ideal: 640 }, height: { ideal: 480 } }
+          });
+          videoStream = stream;
+          videoEl.srcObject = stream;
+          await videoEl.play();
+
+          fallbackMsg.style.display = 'none';
+          cameraStatus.textContent = 'Scanning live';
+          cameraStatus.style.background = 'var(--ok-soft)';
+          cameraStatus.style.color = 'var(--ok)';
+          toggleCameraBtn.innerHTML = '&#9209; Stop Camera';
+          flipCameraBtn.style.display = 'inline-block';
+
+          // Start scan frame loop
+          startScannerLoop();
+        } catch (err) {
+          console.warn('Camera error:', err);
+          cameraStatus.textContent = 'Camera blocked';
+          fallbackMsg.style.display = 'block';
+          UI.toast('Camera permission denied or camera unavailable. Please use manual code input.', 'error');
+        }
+      }
+
+      function stopCamera() {
+        if (scanInterval) {
+          clearInterval(scanInterval);
+          scanInterval = null;
+        }
+        if (videoStream) {
+          videoStream.getTracks().forEach((track) => track.stop());
+          videoStream = null;
+        }
+        if (videoEl) videoEl.srcObject = null;
+        cameraStatus.textContent = 'Idle';
+        cameraStatus.style.background = '';
+        cameraStatus.style.color = '';
+        toggleCameraBtn.innerHTML = '&#9654; Start Camera Scanner';
+        flipCameraBtn.style.display = 'none';
+      }
+
+      function startScannerLoop() {
+        if (!barcodeDetector) {
+          // If native BarcodeDetector not available, keep laser running and allow manual code entry
+          return;
+        }
+
+        scanInterval = setInterval(async () => {
+          if (!videoEl || videoEl.readyState !== videoEl.HAVE_ENOUGH_DATA) return;
+          try {
+            const barcodes = await barcodeDetector.detect(videoEl);
+            if (barcodes && barcodes.length) {
+              const code = barcodes[0].rawValue;
+              const now = Date.now();
+              // Prevent firing repeatedly on the exact same scan within 3 seconds
+              if (code !== lastScannedCode || now - lastScanTimestamp > 3000) {
+                lastScannedCode = code;
+                lastScanTimestamp = now;
+                UI.toast('QR code scanned!', 'info');
+                handleVerify(code, 'QR_SCAN');
+              }
+            }
+          } catch (_e) {}
+        }, 250);
+      }
+
+      toggleCameraBtn.addEventListener('click', () => {
+        if (videoStream) {
+          stopCamera();
+        } else {
+          startCamera();
+        }
+      });
+
+      flipCameraBtn.addEventListener('click', () => {
+        facingMode = facingMode === 'environment' ? 'user' : 'environment';
+        startCamera();
+      });
+
+      window.addEventListener('beforeunload', stopCamera);
+    })();
+  </script>
+</body>
+</html>

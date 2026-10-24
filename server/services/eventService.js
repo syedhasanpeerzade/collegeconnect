@@ -4,6 +4,7 @@ const { ApiError } = require('../utils/ApiError');
 const { nextPublicId, nextRequestId } = require('../utils/helpers');
 const { notify } = require('../utils/notify');
 const { notifyInterestedStudents } = require('./interestService');
+const { createOrReactivateTicket, cancelTicketByRegistration } = require('./ticketService');
 
 const EVENT_CATEGORIES = ['TECHNICAL','CULTURAL','SPORTS','WORKSHOP','SEMINAR','COMPETITION','FEST','CLUB_EVENT','CAREER','ARTS','OTHER'];
 const EVENT_TYPES = ['COLLEGE_WIDE', 'DEPARTMENT', 'CLUB'];
@@ -273,6 +274,9 @@ async function registerStudent(eventId, userId) {
 
     const [pub] = await conn.execute('SELECT public_id FROM event_registrations WHERE id = ?', [regId]);
 
+    // Automatically generate or reactivate ticket with unique ticket code & QR code
+    const ticket = await createOrReactivateTicket(conn, regId, eventId, userId);
+
     // Notify the organizer (and club coordinator if it is a club event)
     await notify(conn, {
       recipientId: ev.organizer_id,
@@ -283,7 +287,16 @@ async function registerStudent(eventId, userId) {
     });
 
     await conn.commit();
-    return { registration_id: pub[0].public_id, event_title: ev.title };
+    return {
+      registration_id: pub[0].public_id,
+      event_title: ev.title,
+      ticket: {
+        id: ticket.id,
+        ticket_code: ticket.ticket_code,
+        status: ticket.status,
+        qr_data_url: ticket.qr_data_url,
+      },
+    };
   } catch (e) {
     await conn.rollback();
     throw e;
@@ -309,8 +322,10 @@ async function cancelRegistration(eventId, userId) {
       throw new ApiError(400, 'Cannot cancel after the registration deadline');
     }
     await conn.execute(`UPDATE event_registrations SET status = 'CANCELLED', cancelled_at = NOW() WHERE id = ?`, [reg.id]);
+    await cancelTicketByRegistration(conn, reg.id, 'Student cancelled registration');
     await conn.commit();
     return { event_title: reg.title };
+
   } catch (e) {
     await conn.rollback();
     throw e;

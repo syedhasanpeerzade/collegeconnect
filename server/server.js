@@ -53,6 +53,8 @@ app.use('/api/admin/content', require('./routes/adminContentRoutes'));
 // Social layer (feed, posts, likes, comments, follows, polls, communities)
 app.use('/api/social', require('./routes/socialRoutes'));
 app.use('/api/reports', require('./routes/reportRoutes'));
+// Event Ticketing system (two-sided: student tickets, coordinator verification, admin management)
+app.use('/api/tickets', require('./routes/ticketRoutes'));
 // Spec-compliant path aliases (event-requests, my-registrations, my-club-applications)
 app.use('/api', require('./routes/specAliasRoutes'));
 
@@ -81,7 +83,9 @@ if (require.main === module) {
       await require('../database/migrate-import.js');
       await require('../database/migrate-achievement-winners.js');
       await require('../database/migrate-achievement-management.js');
+      await require('../database/migrate-ticketing.js');
     } catch (e) {
+
       console.error('Boot migration failed:', e.message);
       process.exit(1);
     }

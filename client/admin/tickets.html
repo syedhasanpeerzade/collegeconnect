@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin - Event Ticketing &amp; Coordinators</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav id="app-nav"></nav>
+
+  <div class="container">
+    <div class="page-head">
+      <div>
+        <h1>Event Ticketing &amp; Coordinator Management</h1>
+        <div class="sub">Assign event coordinators, review attendance rates, and manage tickets campus-wide.</div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <a class="btn btn-secondary" href="/admin/index.html">Admin Workspace</a>
+        <a class="btn" href="/coordinator/event-checkin.html">&#128247; Open Entrance Scanner</a>
+      </div>
+    </div>
+
+    <!-- Overview Stats -->
+    <div class="grid grid-4" id="overview-stats" style="margin-bottom:24px">
+      <div class="loading">Loading overview...</div>
+    </div>
+
+    <!-- Two columns: Left Assigned Events & Coordinators, Right Top Attendance -->
+    <div class="grid grid-2 section">
+      <div class="card">
+        <h3>Assign Event Coordinators</h3>
+        <p style="font-size:13.5px;color:var(--ink-soft)">Select an event and assign staff or student coordinators authorized to scan tickets at entry.</p>
+
+        <form id="assign-coord-form" style="display:flex;flex-direction:column;gap:12px;margin-top:16px">
+          <div>
+            <label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px">Select Event:</label>
+            <select id="modal-event-select" required style="width:100%;padding:8px 12px;border:1px solid var(--line);border-radius:var(--radius-sm)">
+              <option value="">-- Choose event --</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px">Select Coordinator (User):</label>
+            <select id="modal-user-select" required style="width:100%;padding:8px 12px;border:1px solid var(--line);border-radius:var(--radius-sm)">
+              <option value="">-- Choose user --</option>
+            </select>
+          </div>
+          <button type="submit" class="btn" style="align-self:flex-start">&#10010; Assign Coordinator</button>
+        </form>
+
+        <div style="margin-top:20px;border-top:1px solid var(--line);padding-top:14px">
+          <h4 style="font-size:13.5px;margin-bottom:10px">Current Assigned Coordinators for Selected Event</h4>
+          <div id="coordinators-list">
+            <span style="font-size:13px;color:var(--muted)">Select an event above to view and manage its assigned coordinators.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Top Events by Attendance</h3>
+        <p style="font-size:13.5px;color:var(--ink-soft)">Real-time check-in conversion across campus events.</p>
+        <div id="top-events-table" style="margin-top:14px">
+          <div class="loading">Loading attendance...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Ticket Code Inspector / Cancel Modal -->
+    <div class="card section">
+      <h3>Ticket Lookup &amp; Management</h3>
+      <p style="font-size:13.5px;color:var(--ink-soft)">Look up any ticket by code to check validity, entry status, or cancel if necessary.</p>
+
+      <div style="display:flex;gap:10px;margin-top:12px;max-width:540px">
+        <input type="text" id="admin-lookup-code" placeholder="Enter ticket code (e.g. CC-TKT-12-1-A9F2)" style="flex:1;text-transform:uppercase;font-family:monospace">
+        <button class="btn" id="admin-lookup-btn">Lookup</button>
+      </div>
+
+      <div id="admin-ticket-result" style="margin-top:16px"></div>
+    </div>
+  </div>
+
+  <footer id="app-footer"></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script>
+    'use strict';
+    (async function () {
+      const user = Auth.requireRole(['ADMIN']);
+      if (!user) return;
+
+      const eventSelect = document.getElementById('modal-event-select');
+      const userSelect = document.getElementById('modal-user-select');
+      const coordList = document.getElementById('coordinators-list');
+      const lookupBtn = document.getElementById('admin-lookup-btn');
+      const lookupInput = document.getElementById('admin-lookup-code');
+      const lookupResult = document.getElementById('admin-ticket-result');
+
+      // 1. Load Admin Overview
+      try {
+        const res = await API.get('/tickets/admin/overview');
+        const d = res.data;
+        const ov = d.overview || {};
+
+        document.getElementById('overview-stats').innerHTML = [
+          ['Total Tickets Issued', ov.total_tickets_generated || 0],
+          ['Valid Active Tickets', ov.total_valid_tickets || 0, 'color:var(--primary)'],
+          ['Checked In Attendees', ov.total_checked_in || 0, 'color:var(--ok)'],
+          ['Cancelled Tickets', ov.total_cancelled || 0, 'color:var(--danger)'],
+        ].map(([label, val, style]) => `
+          <div class="card stat-card">
+            <span class="stat-label">${label}</span>
+            <span class="stat-value" style="${style || ''}">${val}</span>
+          </div>
+        `).join('');
+
+        // Render top events
+        const topEvents = d.top_events || [];
+        if (!topEvents.length) {
+          document.getElementById('top-events-table').innerHTML = '<div style="color:var(--muted);font-size:13.5px">No event ticket activity yet.</div>';
+        } else {
+          document.getElementById('top-events-table').innerHTML = `
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Event</th>
+                    <th>Date</th>
+                    <th>Tickets</th>
+                    <th>Checked In</th>
+                    <th>Rate</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${topEvents.map((e) => `
+                    <tr>
+                      <td><b><a href="/coordinator/event-checkin.html?eventId=${e.id}">${UI.esc(e.title)}</a></b></td>
+                      <td>${UI.fmtDate(e.event_date)}</td>
+                      <td>${e.tickets_issued}</td>
+                      <td style="color:var(--ok);font-weight:700">${e.checked_in_count}</td>
+                      <td><b>${e.attendance_rate || 0}%</b></td>
+                      <td><a class="btn btn-sm btn-secondary" href="/coordinator/event-checkin.html?eventId=${e.id}">Open</a></td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>`;
+        }
+      } catch (err) {
+        document.getElementById('overview-stats').innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+      }
+
+      // 2. Load Events and Users for assignment dropdowns
+      try {
+        const [evRes, usersRes] = await Promise.all([
+          API.get('/events?all=1'),
+          API.get('/admin/users'),
+        ]);
+
+        const events = evRes.data || [];
+        eventSelect.innerHTML = '<option value="">-- Choose event --</option>' +
+          events.map((e) => `<option value="${e.id}">${UI.esc(e.title)} (${UI.fmtDate(e.event_date)})</option>`).join('');
+
+        const users = usersRes.data || [];
+        userSelect.innerHTML = '<option value="">-- Choose user --</option>' +
+          users.map((u) => `<option value="${u.id}">${UI.esc(u.full_name)} (${UI.esc(u.email)} - ${u.role})</option>`).join('');
+      } catch (err) {
+        console.warn('Dropdown error', err);
+      }
+
+      // 3. Load coordinators for selected event
+      eventSelect.addEventListener('change', async () => {
+        const eventId = eventSelect.value;
+        if (!eventId) {
+          coordList.innerHTML = '<span style="font-size:13px;color:var(--muted)">Select an event above.</span>';
+          return;
+        }
+
+        coordList.innerHTML = '<div class="loading">Loading coordinators...</div>';
+        try {
+          const res = await API.get(`/tickets/events/${eventId}/coordinators`);
+          const list = res.data || [];
+          if (!list.length) {
+            coordList.innerHTML = '<div style="font-size:13px;color:var(--muted);padding:8px 0">No coordinators assigned to this event yet.</div>';
+            return;
+          }
+
+          coordList.innerHTML = `
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Coordinator</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Assigned On</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${list.map((c) => `
+                    <tr>
+                      <td><b>${UI.esc(c.full_name)}</b></td>
+                      <td>${UI.esc(c.email)}</td>
+                      <td><span class="badge">${c.role}</span></td>
+                      <td>${UI.fmtDate(c.created_at)}</td>
+                      <td>
+                        <button class="btn btn-sm btn-danger" data-remove-coord="${c.user_id}" data-event="${eventId}">Remove</button>
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>`;
+        } catch (err) {
+          coordList.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        }
+      });
+
+      // Assign coordinator form
+      document.getElementById('assign-coord-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const eventId = eventSelect.value;
+        const userId = userSelect.value;
+        if (!eventId || !userId) return;
+
+        try {
+          const res = await API.post(`/tickets/events/${eventId}/coordinators`, { user_id: Number(userId) });
+          UI.toast(res.message, 'success');
+          userSelect.value = '';
+          eventSelect.dispatchEvent(new Event('change'));
+        } catch (err) {
+          UI.toast(err.message, 'error');
+        }
+      });
+
+      // Remove coordinator button
+      coordList.addEventListener('click', async (e) => {
+        const btn = e.target.closest('[data-remove-coord]');
+        if (!btn) return;
+        if (!(await UI.confirm('Remove this coordinator from the event?'))) return;
+
+        try {
+          const res = await API.del(`/tickets/events/${btn.dataset.event}/coordinators/${btn.dataset.removeCoord}`);
+          UI.toast(res.message, 'success');
+          eventSelect.dispatchEvent(new Event('change'));
+        } catch (err) {
+          UI.toast(err.message, 'error');
+        }
+      });
+
+      // 4. Ticket Lookup & Cancel
+      lookupBtn.addEventListener('click', async () => {
+        const code = lookupInput.value.trim().toUpperCase();
+        if (!code) return;
+
+        lookupResult.innerHTML = '<div class="loading">Looking up ticket...</div>';
+        try {
+          const res = await API.get(`/tickets/ticket/${encodeURIComponent(code)}`);
+          const t = res.data;
+
+          lookupResult.innerHTML = `
+            <div class="card" style="background:var(--card-2);border:1px solid var(--line);max-width:600px">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+                <div>
+                  <h4 style="margin:0 0 4px">${UI.esc(t.event_title)}</h4>
+                  <div class="ticket-code-display">${UI.esc(t.ticket_code)}</div>
+                </div>
+                <span class="ticket-status-badge ${t.status.toLowerCase()}">${t.status}</span>
+              </div>
+
+              <div style="font-size:13.5px;display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+                <div>Attendee: <b>${UI.esc(t.student_name)}</b></div>
+                <div>Reg No: <b>${UI.esc(t.student_reg_no || '-')}</b></div>
+                <div>Email: ${UI.esc(t.student_email)}</div>
+                <div>Venue: ${UI.esc(t.venue || '-')}</div>
+                <div>Issued On: ${UI.fmtDateTime(t.created_at)}</div>
+                <div>Checked In: ${t.checked_in_at ? UI.fmtDateTime(t.checked_in_at) : 'No'}</div>
+              </div>
+
+              ${t.status !== 'CANCELLED' ? `
+                <button class="btn btn-sm btn-danger" id="admin-cancel-tkt-btn" data-id="${t.id}">Cancel This Ticket</button>
+              ` : `
+                <div style="color:var(--danger);font-size:13px">Ticket cancelled on ${UI.fmtDateTime(t.cancelled_at)} (${UI.esc(t.cancelled_reason || 'N/A')})</div>
+              `}
+            </div>`;
+
+          const cancelBtn = document.getElementById('admin-cancel-tkt-btn');
+          if (cancelBtn) {
+            cancelBtn.addEventListener('click', async () => {
+              const reason = await UI.prompt('Enter reason for ticket cancellation:', { title: 'Cancel Ticket', required: true });
+              if (!reason) return;
+              try {
+                const cRes = await API.patch(`/tickets/ticket/${cancelBtn.dataset.id}/cancel`, { reason });
+                UI.toast(cRes.message, 'success');
+                lookupBtn.click();
+              } catch (cErr) {
+                UI.toast(cErr.message, 'error');
+              }
+            });
+          }
+        } catch (err) {
+          lookupResult.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

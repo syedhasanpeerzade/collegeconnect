@@ -1033,3 +1033,295 @@ tr:hover td { background: #F4F8FF; }
   .gallery-nav { width: 40px; height: 40px; font-size: 19px; }
   .gallery-stage img { max-height: 66vh; }
 }
+
+/* ============================================================
+   Event Ticketing System (Student & Coordinator Interfaces)
+   ============================================================ */
+
+.ticket-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 22px;
+}
+
+.ticket-card {
+  position: relative;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  transition: transform var(--speed), box-shadow var(--speed);
+}
+.ticket-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lift);
+}
+
+.ticket-card-header {
+  position: relative;
+  padding: 18px 20px 14px;
+  background: linear-gradient(135deg, rgba(7, 86, 201, 0.08), rgba(74, 156, 235, 0.04));
+  border-bottom: 1px dashed var(--line);
+}
+
+.ticket-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+.ticket-status-badge.valid { background: var(--ok-soft); color: var(--ok); border: 1px solid rgba(46, 158, 91, 0.3); }
+.ticket-status-badge.checked_in { background: var(--info-soft); color: var(--primary); border: 1px solid rgba(7, 86, 201, 0.3); }
+.ticket-status-badge.cancelled { background: var(--danger-soft); color: var(--danger); border: 1px solid rgba(192, 57, 43, 0.3); }
+.ticket-status-badge.expired { background: var(--bg-soft); color: var(--muted); border: 1px solid var(--line); }
+
+.ticket-body {
+  padding: 20px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ticket-qr-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  background: var(--card-2);
+  border-radius: var(--radius);
+  border: 1px solid var(--line-soft);
+}
+.ticket-qr-img {
+  width: 96px;
+  height: 96px;
+  border-radius: 8px;
+  background: #fff;
+  padding: 4px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+
+.ticket-code-display {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.06em;
+  color: var(--primary);
+  background: var(--sky-light);
+  padding: 4px 10px;
+  border-radius: 6px;
+  display: inline-block;
+}
+
+.ticket-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+.ticket-detail-row svg, .ticket-detail-row span.icon {
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.ticket-footer {
+  padding: 14px 20px;
+  border-top: 1px solid var(--line);
+  background: var(--card-2);
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Modal Ticket Voucher View */
+.voucher-pass {
+  background: #ffffff;
+  color: #172B4D;
+  border: 2px solid #DCE6F5;
+  border-radius: 20px;
+  overflow: hidden;
+  max-width: 480px;
+  margin: 0 auto;
+  box-shadow: 0 12px 36px rgba(6, 69, 165, 0.12);
+}
+.voucher-pass-top {
+  background: linear-gradient(135deg, #0756C9, #0645A5);
+  color: #ffffff;
+  padding: 24px;
+  text-align: center;
+}
+.voucher-pass-top h2 { color: #ffffff; margin: 0 0 6px; font-size: 22px; }
+.voucher-pass-top .sub { color: #DCEEFF; font-size: 13px; }
+
+.voucher-pass-middle {
+  position: relative;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.voucher-stub-divider {
+  position: relative;
+  border-top: 2px dashed #DCE6F5;
+  margin: 10px -24px;
+}
+.voucher-stub-divider::before,
+.voucher-stub-divider::after {
+  content: '';
+  position: absolute;
+  top: -12px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--bg);
+}
+.voucher-stub-divider::before { left: -12px; }
+.voucher-stub-divider::after { right: -12px; }
+
+.voucher-qr-wrap {
+  text-align: center;
+  padding: 12px 0 6px;
+}
+.voucher-qr-wrap img {
+  width: 180px;
+  height: 180px;
+  margin: 0 auto 10px;
+  border-radius: 12px;
+  border: 1px solid #DCE6F5;
+  padding: 6px;
+  background: #ffffff;
+}
+
+/* Coordinator Verification Dashboard */
+.scanner-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  padding: 24px;
+  box-shadow: var(--shadow);
+}
+
+.scanner-video-wrap {
+  position: relative;
+  width: 100%;
+  max-width: 460px;
+  height: 320px;
+  margin: 0 auto 16px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: #000;
+  border: 2px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.scanner-video-wrap video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.scanner-overlay-box {
+  position: absolute;
+  width: 200px;
+  height: 200px;
+  border: 2px solid var(--sky);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+  border-radius: 12px;
+  pointer-events: none;
+}
+.scanner-laser {
+  position: absolute;
+  left: 0; right: 0; height: 2px;
+  background: #4A9CEB;
+  box-shadow: 0 0 8px #4A9CEB;
+  animation: scanLaser 2s infinite ease-in-out alternate;
+}
+@keyframes scanLaser {
+  0% { top: 0%; }
+  100% { top: 100%; }
+}
+
+.verify-alert {
+  padding: 18px 20px;
+  border-radius: var(--radius);
+  margin-top: 16px;
+  animation: fadeIn 0.25s ease-out;
+}
+.verify-alert.valid {
+  background: #EAF8EE;
+  border: 2px solid #2E9E5B;
+  color: #165B33;
+}
+.verify-alert.denied {
+  background: #FDF0EE;
+  border: 2px solid #C0392B;
+  color: #8A1F14;
+}
+.verify-alert.wrong {
+  background: #FFF8E6;
+  border: 2px solid #C98A1B;
+  color: #7D5200;
+}
+.verify-alert.invalid {
+  background: #FDF0EE;
+  border: 2px solid #C0392B;
+  color: #8A1F14;
+}
+
+.attendance-progress-bar {
+  height: 8px;
+  background: var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+.attendance-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--sky), var(--primary));
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+/* Print Styles for PDF / Paper Ticket */
+@media print {
+  nav#app-nav, footer#app-footer, .topnav, .site-footer,
+  .page-head, .hero-actions, .filter-bar, .modal-actions,
+  button, .btn, .no-print {
+    display: none !important;
+  }
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    padding: 0 !important;
+  }
+  .container {
+    max-width: 100% !important;
+    width: 100% !important;
+    padding: 0 !important;
+  }
+  .voucher-pass {
+    box-shadow: none !important;
+    border: 2px solid #000000 !important;
+    margin: 20px auto !important;
+    page-break-inside: avoid;
+  }
+  .voucher-pass-top {
+    background: #0756C9 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .ticket-code-display {
+    border: 1px solid #000 !important;
+  }
+}
+

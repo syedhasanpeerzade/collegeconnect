@@ -10,6 +10,11 @@ function ok(res, message, data = null, status = 200) {
   res.status(status).json({ success: true, message, data });
 }
 
+/** 201 Created helper */
+function created(res, message, data = null) {
+  ok(res, message, data, 201);
+}
+
 /** Throw a standard error. */
 function fail(status, message, code) {
   throw new ApiError(status, message, code);
@@ -65,4 +70,4 @@ async function nextRequestId(conn) {
   return `REQ-${year}-${pad(seq, 4)}`;
 }
 
-module.exports = { asyncHandler, ok, fail, assert, pad, nextPublicId, nextRequestId };
+module.exports = { asyncHandler, ok, created, fail, assert, pad, nextPublicId, nextRequestId };

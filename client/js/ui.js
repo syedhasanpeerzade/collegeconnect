@@ -441,6 +441,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         link('/announcements.html', 'Announcements', ['/announcements.html']),
         link('/dashboard.html', 'Dashboard', ['/dashboard.html']),
         link('/events.html', 'Events', ['/events.html', '/event-details.html', '/event-request.html', '/my-registrations.html', '/my-applications.html']),
+        link('/my-tickets.html', 'Tickets', ['/my-tickets.html']),
         link('/clubs.html', 'Clubs', ['/clubs.html', '/club-details.html', '/club-application.html', '/my-clubs.html']),
         link('/achievements.html', 'Achievements', ['/achievements.html', '/achievement-details.html']),
         link('/complaints.html', 'Complaints', ['/complaints.html', '/complaint-details.html']),

@@ -111,9 +111,30 @@
           regBtnEl.disabled = true;
           try {
             const res = await API.post(`/events/${id}/register`);
-            regMsg.innerHTML = `<div class="ok-box">${UI.esc(res.message)}</div>`;
-            UI.toast('Registered successfully', 'success');
-            setTimeout(() => location.reload(), 1200);
+            const ticket = res.data && res.data.ticket;
+
+            if (ticket && ticket.qr_data_url) {
+              regMsg.innerHTML = `
+                <div class="ok-box" style="margin-top:14px;border:2px solid var(--ok);background:var(--card)">
+                  <div style="font-weight:700;color:var(--ok);font-size:16px;margin-bottom:8px">&#9989; Registration Confirmed! Your Ticket is Ready</div>
+                  <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+                    <img src="${ticket.qr_data_url}" alt="Ticket QR" style="width:120px;height:120px;border-radius:10px;border:1px solid var(--line);background:#fff;padding:4px">
+                    <div>
+                      <div style="font-size:12px;color:var(--muted)">TICKET CODE</div>
+                      <div class="ticket-code-display" style="font-size:16px;margin:3px 0 8px">${UI.esc(ticket.ticket_code)}</div>
+                      <div style="display:flex;gap:8px;flex-wrap:wrap">
+                        <a class="btn btn-sm" href="/my-tickets.html">&#127915; View in My Tickets</a>
+                        <button class="btn btn-sm btn-secondary" onclick="window.print()">&#128424; Print Pass</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>`;
+              UI.toast('Ticket generated successfully!', 'success');
+            } else {
+              regMsg.innerHTML = `<div class="ok-box">${UI.esc(res.message)}</div>`;
+              UI.toast('Registered successfully', 'success');
+              setTimeout(() => location.reload(), 1200);
+            }
           } catch (err) {
             regMsg.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
             regBtnEl.disabled = false;
