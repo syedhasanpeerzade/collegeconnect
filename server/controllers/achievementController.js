@@ -3,7 +3,6 @@
 const svc = require('../services/achievementService');
 const { asyncHandler, ok } = require('../utils/helpers');
 const { body } = require('express-validator');
-const { uploads, uploadErrorHandler } = require('../middleware/upload');
 
 const list = asyncHandler(async (req, res) => {
   const rows = await svc.list(req.user, {

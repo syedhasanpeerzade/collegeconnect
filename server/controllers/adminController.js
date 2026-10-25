@@ -3,7 +3,6 @@ const db = require('../config/db');
 const { asyncHandler, ok } = require('../utils/helpers');
 const stats = require('../services/statsService');
 const users = require('../services/userService');
-const { body } = require('express-validator');
 
 // ---- Dashboards ----
 const studentDashboard = asyncHandler(async (req, res) => {
@@ -40,13 +39,6 @@ const changeRole = asyncHandler(async (req, res) => {
   ok(res, 'Role updated');
 });
 
-const createStaffRules = [
-  body('full_name').trim().isLength({ min: 3 }).withMessage('Full name required'),
-  body('email').trim().isEmail().withMessage('Valid email required'),
-  body('phone').trim().matches(/^[0-9+\-\s]{7,20}$/).withMessage('Valid phone required'),
-  body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
-  body('role').isIn(['STUDENT', 'ORGANIZER', 'CLUB_COORDINATOR', 'FACULTY', 'ADMIN']),
-];
 
 // ---- Departments (simple reference list used by forms) ----
 const departments = asyncHandler(async (req, res) => {
@@ -186,5 +178,5 @@ const exportReport = asyncHandler(async (req, res) => {
 
 module.exports = {
   studentDashboard, adminDashboard, facultyDashboard,
-  listUsers, toggleUser, changeRole, createStaffRules, departments, exportReport,
+  listUsers, toggleUser, changeRole, departments, exportReport,
 };

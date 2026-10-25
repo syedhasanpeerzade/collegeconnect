@@ -2,7 +2,6 @@
 const svc = require('../services/complaintService');
 const { asyncHandler, ok } = require('../utils/helpers');
 const { body } = require('express-validator');
-const { uploads, uploadErrorHandler } = require('../middleware/upload');
 
 const CATEGORIES = ['INFRASTRUCTURE','CLASSROOM','LABORATORY','WIFI','HOSTEL','CANTEEN','LIBRARY','TRANSPORT','ACADEMICS','OTHER'];
 const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];

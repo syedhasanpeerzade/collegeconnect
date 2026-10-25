@@ -6,8 +6,7 @@ const cors = require('cors');
 const morgan = require('morgan');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
-const { errorHandler, notFound } = require('./middleware/errorHandler');
-const { uploadErrorHandler } = require('./middleware/upload');
+const { errorHandler } = require('./middleware/errorHandler');
 
 const app = express();
 

@@ -1,7 +1,7 @@
 'use strict';
 const router = require('express').Router();
 const QRCode = require('qrcode');
-const { optionalAuth, authorize, authenticate } = require('../middleware/auth');
+const { optionalAuth } = require('../middleware/auth');
 const { ok, asyncHandler } = require('../utils/helpers');
 
 // Destination is always APP_URL + /events (one permanent QR for the whole college)

@@ -1,8 +1,6 @@
 'use strict';
 const svc = require('../services/announcementService');
 const { asyncHandler, ok } = require('../utils/helpers');
-const { optionalAuth } = require('../middleware/auth');
-const { uploads, uploadErrorHandler } = require('../middleware/upload');
 
 const list = asyncHandler(async (req, res) => {
   const rows = await svc.listFor(req.user, { category: req.query.category || '' });

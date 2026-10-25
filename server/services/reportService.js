@@ -454,18 +454,6 @@ async function _shieldUser(userId, reason, setBy, note) {
 // Shielded-content visibility checks (used by feed / comments service)
 // ---------------------------------------------------------------------------
 
-/** Is this post shielded (hidden from public feeds)? */
-async function isPostShielded(postId) {
-  const [rows] = await db.execute('SELECT 1 FROM content_shield WHERE table_name = ? AND record_id = ?', ['posts', Number(postId)]);
-  return rows.length > 0;
-}
-
-/** Is this comment shielded? */
-async function isCommentShielded(commentId) {
-  const [rows] = await db.execute('SELECT 1 FROM content_shield WHERE table_name = ? AND record_id = ?', ['post_comments', Number(commentId)]);
-  return rows.length > 0;
-}
-
 /** Is this user shielded (their new content auto-held)? */
 async function isUserShielded(userId) {
   const [rows] = await db.execute('SELECT 1 FROM user_shield WHERE user_id = ? AND reason <> ?', [Number(userId), 'CLEARED']);
@@ -475,7 +463,7 @@ async function isUserShielded(userId) {
 module.exports = {
   reportPost, reportComment, reportUser,
   listPendingReports, pendingCounts, resolveReport, restoreContent, deleteContent,
-  isPostShielded, isCommentShielded, isUserShielded,
+  isUserShielded,
   REPORT_REASONS_POST, REPORT_REASONS_COMMENT, REPORT_REASONS_USER, REASON_LABEL,
   THRESHOLDS,
 };

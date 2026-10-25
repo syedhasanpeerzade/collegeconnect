@@ -1,7 +1,6 @@
 'use strict';
 const report = require('../services/reportService');
 const { asyncHandler } = require('../utils/helpers');
-const { authorize } = require('../middleware/auth');
 
 const ok = (res, data, message, status = 200) => res.status(status).json({ success: true, message: message || 'OK', data });
 
