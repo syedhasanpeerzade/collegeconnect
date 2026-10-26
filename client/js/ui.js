@@ -445,8 +445,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         link('/clubs.html', 'Clubs', ['/clubs.html', '/club-details.html', '/club-application.html', '/my-clubs.html']),
         link('/achievements.html', 'Achievements', ['/achievements.html', '/achievement-details.html']),
         link('/complaints.html', 'Complaints', ['/complaints.html', '/complaint-details.html']),
-        link(Auth.dashboardFor(user.role), user.role === 'STUDENT' ? 'My Space' : 'Workspace',
-          ['/admin/', '/organizer/', '/coordinator/', '/faculty/']),
+        ...(user.role !== 'STUDENT' ? [link(Auth.dashboardFor(user.role), 'Workspace', ['/admin/', '/organizer/', '/coordinator/', '/faculty/'])] : []),
       ].join('');
     } else {
       links = [
