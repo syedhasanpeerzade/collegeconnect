@@ -97,7 +97,7 @@ const update = asyncHandler(async (req, res) => {
   // published (draft edits are invisible, so they must not ping anyone).
   if (p.is_published) {
     const [regs] = await db.execute(
-      `SELECT student_id FROM event_registrations WHERE event_id = ? AND status = 'REGISTERED'`, [id]
+      `SELECT student_id FROM event_registrations WHERE event_id = ? AND status IN ('REGISTERED', 'PENDING', 'PENDING_APPROVAL', 'UNDER_REVIEW')`, [id]
     );
     for (const r of regs) {
       await notify(db, {
@@ -139,7 +139,7 @@ const setStatus = asyncHandler(async (req, res) => {
   await db.execute('UPDATE events SET status = ? WHERE id = ?', [status, id]);
   if (status === 'CANCELLED') {
     const [regs] = await db.execute(
-      `SELECT student_id FROM event_registrations WHERE event_id = ? AND status = 'REGISTERED'`, [id]
+      `SELECT student_id FROM event_registrations WHERE event_id = ? AND status IN ('REGISTERED', 'PENDING', 'PENDING_APPROVAL', 'UNDER_REVIEW')`, [id]
     );
     for (const r of regs) {
       await notify(db, {

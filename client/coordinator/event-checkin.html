@@ -36,6 +36,14 @@
     .badge-scan-status.ALREADY_CHECKED_IN { background: var(--danger-soft); color: var(--danger); }
     .badge-scan-status.WRONG_EVENT { background: var(--warn-soft); color: var(--warn); }
     .badge-scan-status.INVALID { background: var(--danger-soft); color: var(--danger); }
+    .badge-scan-status.APPROVED_ENTRY_ALLOWED, .badge-scan-status.SUCCESS { background: var(--ok-soft); color: var(--ok); }
+    .badge-scan-status.PENDING_APPROVAL { background: var(--warn-soft); color: var(--warn); }
+    .badge-scan-status.REJECTED_CANCELLED, .badge-scan-status.INVALID_QR_CODE { background: var(--danger-soft); color: var(--danger); }
+    @media (max-width: 640px) {
+      .scanner-video-wrap { height: min(72vw, 320px); min-height: 220px; }
+      #manual-verify-form { flex-direction: column; }
+      #manual-verify-form .btn, .scanner-controls .btn { min-height: 46px; }
+    }
   </style>
 </head>
 <body>
@@ -123,8 +131,8 @@
 
           <!-- Manual Ticket Code Input -->
           <form id="manual-verify-form" style="display:flex;gap:8px">
-            <input type="text" id="manual-ticket-code" placeholder="e.g. CC-TKT-12-1-A9F2" style="flex:1;text-transform:uppercase;font-family:monospace;font-size:14px" autocomplete="off" required>
-            <button type="submit" class="btn" id="manual-verify-btn">Verify Ticket</button>
+            <input type="text" id="manual-ticket-code" placeholder="Ticket code or ticket ID" style="flex:1;text-transform:uppercase;font-family:monospace;font-size:14px" autocomplete="off" required>
+            <button type="submit" class="btn" id="manual-verify-btn">Check In Ticket</button>
           </form>
         </div>
 
@@ -164,6 +172,8 @@
               <option value="CHECKED_IN">Checked In</option>
               <option value="VALID">Not Checked In</option>
               <option value="CANCELLED">Cancelled</option>
+              <option value="PENDING_APPROVAL">Pending Approval</option>
+              <option value="REJECTED_CANCELLED">Rejected / Cancelled</option>
             </select>
           </div>
         </div>
@@ -176,10 +186,11 @@
   <footer id="app-footer"></footer>
   <script src="/js/api.js"></script>
   <script src="/js/ui.js"></script>
+  <script src="/vendor/jsqr.js"></script>
   <script>
     'use strict';
     (async function () {
-      const user = Auth.requireRole(['CLUB_COORDINATOR', 'ORGANIZER', 'FACULTY', 'ADMIN', 'STUDENT']);
+      const user = Auth.requireRole(['CLUB_COORDINATOR', 'ORGANIZER', 'FACULTY', 'ADMIN']);
       if (!user) return;
 
       const eventSelect = document.getElementById('event-select');
@@ -197,6 +208,10 @@
       let facingMode = 'environment';
       let lastScannedCode = null;
       let lastScanTimestamp = 0;
+      let scanFrameInProgress = false;
+      let scanRequestInProgress = false;
+      const scanCanvas = document.createElement('canvas');
+      const scanContext = scanCanvas.getContext('2d', { willReadFrequently: true });
 
       // 1. Load coordinator events
       try {
@@ -235,6 +250,7 @@
       });
 
       async function onEventSelected(eventId) {
+        if (currentEventId && currentEventId !== Number(eventId)) stopCamera();
         currentEventId = Number(eventId);
         const ev = assignedEvents.find((x) => x.id === currentEventId);
         if (ev) {
@@ -292,7 +308,7 @@
           <div class="checkin-feed-item">
             <div>
               <b>${UI.esc(l.student_name || 'Attendee')}</b> <span class="mono" style="font-size:12px;color:var(--muted)">(${UI.esc(l.ticket_code || l.notes || '-')})</span>
-              <div style="font-size:11.5px;color:var(--ink-soft)">${new Date(l.scanned_at).toLocaleTimeString()} by ${UI.esc(l.coordinator_name || 'Staff')}</div>
+              <div style="font-size:11.5px;color:var(--ink-soft)">${UI.esc(l.event_title || 'Event')} &middot; ${UI.fmtDateTime(l.scanned_at)} by ${UI.esc(l.coordinator_name || 'Staff')}</div>
             </div>
             <span class="badge-scan-status ${l.status}">${l.status.replace(/_/g, ' ')}</span>
           </div>
@@ -327,7 +343,10 @@
                     <td class="mono">${UI.esc(r.student_reg_no || r.registration_number)}</td>
                     <td>${UI.esc(r.department_name || '-')}</td>
                     <td class="mono font-bold">${UI.esc(r.ticket_code || '-')}</td>
-                    <td>${UI.statusBadge(r.ticket_status || 'REGISTERED')}</td>
+                    <td>
+                      ${UI.statusBadge(r.registration_status || 'REGISTERED')}
+                      ${r.ticket_status ? UI.statusBadge(r.ticket_status) : ''}
+                    </td>
                     <td>${r.checked_in_at ? UI.fmtDateTime(r.checked_in_at) : '<span style="color:var(--muted)">-</span>'}</td>
                     <td>
                       ${r.ticket_status === 'VALID' ? `
@@ -352,178 +371,73 @@
           return;
         }
 
-        const code = String(ticketCode).trim().toUpperCase();
+        const code = String(ticketCode).trim();
         if (!code) return;
 
-        resultBox.innerHTML = '<div class="loading" style="padding:30px">Verifying ticket against database...</div>';
+        if (!navigator.onLine) {
+          resultBox.innerHTML = '<div class="error-box">Internet connection required. Ticket validation and check-in must be confirmed by the server.</div>';
+          return;
+        }
+
+        resultBox.innerHTML = '<div class="loading" style="padding:30px">Validating ticket and recording check-in with the server...</div>';
 
         try {
-          const res = await API.post('/tickets/verify', {
+          const res = await API.post('/tickets/scan', {
             event_id: currentEventId,
             ticket_code: code,
+            scan_method: scanMethod,
           });
 
           const d = res.data;
-
-          // Case A: VALID TICKET
-          if (d.result === 'VALID') {
-            resultBox.innerHTML = `
-              <div class="verify-alert valid" style="width:100%">
-                <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-                  <span style="font-size:26px">&#9989;</span>
-                  <div>
-                    <h3 style="margin:0;color:#165B33">VALID TICKET</h3>
-                    <div style="font-size:13px;color:#2E9E5B">Verified against database. Ready for entry.</div>
-                  </div>
-                </div>
-
-                <div style="background:#fff;border-radius:8px;padding:14px;color:var(--ink);margin:12px 0;border:1px solid #C4EED0">
-                  <div style="font-size:17px;font-weight:700">${UI.esc(d.ticket.student_name)}</div>
-                  <div style="font-size:13px;color:var(--ink-soft);margin-top:2px">
-                    Reg No: <b class="mono">${UI.esc(d.ticket.student_reg_no || '-')}</b> &middot; ${UI.esc(d.ticket.department_name || '')}
-                  </div>
-                  <div style="font-size:13px;color:var(--ink-soft);margin-top:4px">
-                    Ticket Code: <span class="ticket-code-display">${UI.esc(d.ticket.ticket_code)}</span>
-                  </div>
-                  <div style="font-size:13px;margin-top:4px;color:var(--primary)">
-                    Event: <b>${UI.esc(d.ticket.event_title)}</b>
-                  </div>
-                </div>
-
-                <button class="btn btn-lg" id="confirm-entry-btn" style="width:100%;background:#2E9E5B;border-color:#2E9E5B;font-size:16px;font-weight:700"
-                        data-code="${UI.esc(d.ticket.ticket_code)}" data-id="${d.ticket.id}" data-method="${scanMethod}">
-                  &#10003; Confirm Entry
-                </button>
-              </div>`;
-
-            const confirmBtn = document.getElementById('confirm-entry-btn');
-            confirmBtn.addEventListener('click', () => handleConfirmEntry(confirmBtn.dataset.code, confirmBtn.dataset.id, confirmBtn.dataset.method));
-            return;
-          }
-
-          // Case B: ALREADY CHECKED IN
-          if (d.result === 'ALREADY_CHECKED_IN') {
-            resultBox.innerHTML = `
-              <div class="verify-alert denied" style="width:100%">
-                <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-                  <span style="font-size:26px">&#9940;</span>
-                  <div>
-                    <h3 style="margin:0;color:#8A1F14">TICKET ALREADY USED &mdash; ENTRY DENIED</h3>
-                    <div style="font-size:13px">This ticket has already been checked in. Duplicate entry rejected.</div>
-                  </div>
-                </div>
-                <div style="background:#fff;border-radius:8px;padding:12px;color:var(--ink);margin-top:8px;border:1px solid #F5C6CB">
-                  <div>Attendee: <b>${UI.esc(d.ticket ? d.ticket.student_name : 'Unknown')}</b> (${UI.esc(d.ticket ? d.ticket.student_reg_no : '')})</div>
-                  <div style="margin-top:4px;color:var(--danger)">
-                    Original Entry: <b>${UI.fmtDateTime(d.checked_in_at)}</b>
-                  </div>
-                  <div style="font-size:12px;color:var(--muted)">Verified by: ${UI.esc(d.checked_in_by || 'Coordinator')}</div>
-                </div>
-              </div>`;
-            await loadEventAttendees();
-            return;
-          }
-
-          // Case C: WRONG EVENT
-          if (d.result === 'WRONG_EVENT') {
-            resultBox.innerHTML = `
-              <div class="verify-alert wrong" style="width:100%">
-                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-                  <span style="font-size:26px">&#9888;</span>
-                  <div>
-                    <h3 style="margin:0;color:#7D5200">WRONG EVENT</h3>
-                    <div style="font-size:13px">Ticket is valid, but belongs to another event.</div>
-                  </div>
-                </div>
-                <div style="background:#fff;border-radius:8px;padding:12px;color:var(--ink);margin-top:8px;border:1px solid #FFEBAA">
-                  <div>Attendee: <b>${UI.esc(d.ticket.student_name)}</b></div>
-                  <div style="color:var(--danger);margin-top:4px">
-                    Ticket was issued for: <b>${UI.esc(d.ticket.actual_event.title)}</b>
-                  </div>
-                </div>
-              </div>`;
-            await loadEventAttendees();
-            return;
-          }
-
-          // Case D: CANCELLED TICKET
-          if (d.result === 'CANCELLED') {
-            resultBox.innerHTML = `
-              <div class="verify-alert denied" style="width:100%">
-                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-                  <span style="font-size:26px">&#10060;</span>
-                  <div>
-                    <h3 style="margin:0;color:#8A1F14">TICKET CANCELLED &mdash; ENTRY DENIED</h3>
-                    <div style="font-size:13px">${UI.esc(d.message)}</div>
-                  </div>
-                </div>
-                ${d.ticket ? `<div style="font-size:13px;margin-top:6px">Attendee: <b>${UI.esc(d.ticket.student_name)}</b> (Cancelled: ${UI.fmtDateTime(d.ticket.cancelled_at)})</div>` : ''}
-              </div>`;
-            await loadEventAttendees();
-            return;
-          }
-
-          // Case E: INVALID TICKET
+          const outcomes = {
+            APPROVED_ENTRY_ALLOWED: { title: 'APPROVED — ENTRY ALLOWED', style: 'valid', icon: '&#9989;' },
+            ALREADY_CHECKED_IN: { title: 'ALREADY CHECKED IN', style: 'denied', icon: '&#9940;' },
+            PENDING_APPROVAL: { title: 'PENDING APPROVAL', style: 'wrong', icon: '&#9888;' },
+            REJECTED_CANCELLED: { title: 'REJECTED/CANCELLED', style: 'denied', icon: '&#10060;' },
+            INVALID_QR_CODE: { title: 'INVALID QR CODE', style: 'invalid', icon: '&#10060;' },
+          };
+          const outcome = outcomes[d.result] || outcomes.INVALID_QR_CODE;
+          const ticket = d.ticket;
+          const selectedEvent = assignedEvents.find((e) => e.id === currentEventId);
+          const details = ticket ? `
+            <div style="background:#fff;border-radius:8px;padding:14px;color:var(--ink);margin-top:12px;border:1px solid var(--line)">
+              <div style="font-size:17px;font-weight:700">${UI.esc(ticket.student_name || 'Student')}</div>
+              <div style="font-size:13px;color:var(--ink-soft);margin-top:3px">
+                Reg No: <b class="mono">${UI.esc(ticket.student_reg_no || ticket.registration_number || '-')}</b>
+                ${ticket.department_name ? `&middot; ${UI.esc(ticket.department_name)}` : ''}
+              </div>
+              <div style="font-size:13px;color:var(--ink-soft);margin-top:4px">
+                Registration status: <b>${UI.esc(ticket.registration_status || '-')}</b>
+                &middot; Ticket status: <b>${UI.esc(ticket.status || '-')}</b>
+              </div>
+              <div style="font-size:13px;color:var(--ink-soft);margin-top:4px">
+                Ticket: <span class="mono">${UI.esc(ticket.ticket_code || '-')}</span>
+              </div>
+              <div style="font-size:13px;margin-top:4px;color:var(--primary)">
+                Event: <b>${UI.esc(ticket.event_title || (selectedEvent && selectedEvent.title) || '-')}</b>
+              </div>
+              ${d.checked_in_at ? `<div style="font-size:13px;margin-top:4px">Check-in time: <b>${UI.fmtDateTime(d.checked_in_at)}</b></div>` : ''}
+              ${d.result === 'ALREADY_CHECKED_IN' ? `<div style="font-size:12px;margin-top:4px;color:var(--muted)">Recorded by ${UI.esc(d.checked_in_by || 'Coordinator')}</div>` : ''}
+            </div>` : '';
           resultBox.innerHTML = `
-            <div class="verify-alert invalid" style="width:100%">
+            <div class="verify-alert ${outcome.style}" style="width:100%">
               <div style="display:flex;align-items:center;gap:10px">
-                <span style="font-size:26px">&#10060;</span>
+                <span style="font-size:26px">${outcome.icon}</span>
                 <div>
-                  <h3 style="margin:0;color:#8A1F14">INVALID TICKET</h3>
-                  <div style="font-size:13px">No registration or ticket found matching code "${UI.esc(code)}".</div>
+                  <h3 style="margin:0">${outcome.title}</h3>
+                  <div style="font-size:13px;margin-top:3px">${UI.esc(d.message || outcome.title)}</div>
                 </div>
               </div>
+              ${details}
             </div>`;
+          if (d.result === 'APPROVED_ENTRY_ALLOWED') UI.toast('Check-in recorded. Entry allowed.', 'success');
           await loadEventAttendees();
 
         } catch (err) {
-          resultBox.innerHTML = `<div class="error-box">${UI.esc(err.message)}</div>`;
-        }
-      }
-
-      // 4. Confirm Entry (Atomic Check-in on Backend)
-      async function handleConfirmEntry(ticketCode, ticketId, scanMethod) {
-        if (!currentEventId) return;
-        const btn = document.getElementById('confirm-entry-btn');
-        if (btn) btn.disabled = true;
-
-        try {
-          const res = await API.post('/tickets/confirm-entry', {
-            event_id: currentEventId,
-            ticket_code: ticketCode,
-            ticket_id: ticketId,
-            scan_method: scanMethod || 'QR_SCAN',
-          });
-
-          UI.toast(res.message, 'success');
-
-          resultBox.innerHTML = `
-            <div class="verify-alert valid" style="width:100%">
-              <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-                <span style="font-size:28px">&#9989;</span>
-                <div>
-                  <h3 style="margin:0;color:#165B33">ENTRY CONFIRMED</h3>
-                  <div style="font-size:13.5px">${UI.esc(res.data.student_name)} checked in at ${new Date(res.data.checked_in_at).toLocaleTimeString()}.</div>
-                </div>
-              </div>
-              <div style="font-size:12px;color:var(--ink-soft);margin-top:6px">
-                Ticket: <span class="mono">${UI.esc(res.data.ticket_code)}</span> &middot; Recorded by ${UI.esc(res.data.checked_in_by || user.full_name)}
-              </div>
-            </div>`;
-
-          // Refresh statistics and roster
-          await loadEventAttendees();
-
-          // Reset verification box after 4 seconds
-          setTimeout(() => {
-            if (resultBox.querySelector('.verify-alert.valid h3').textContent === 'ENTRY CONFIRMED') {
-              resetVerificationBox();
-            }
-          }, 4000);
-
-        } catch (err) {
-          UI.toast(err.message, 'error');
-          if (btn) btn.disabled = false;
+          const message = err.status
+            ? err.message
+            : 'Could not reach the server. An internet connection is required to validate and record entry.';
+          resultBox.innerHTML = `<div class="error-box">${UI.esc(message)}</div>`;
         }
       }
 
@@ -561,7 +475,7 @@
         window.open(`/api/tickets/events/${currentEventId}/export?token=${encodeURIComponent(token)}`, '_blank');
       });
 
-      // 5. Camera QR Scanner Setup
+      // Camera QR scanner: native BarcodeDetector when available, jsQR otherwise.
       const videoEl = document.getElementById('scanner-video');
       const toggleCameraBtn = document.getElementById('toggle-camera-btn');
       const flipCameraBtn = document.getElementById('flip-camera-btn');
@@ -577,6 +491,11 @@
       async function startCamera() {
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
           UI.alert('Camera access is not supported by your browser. Please use the manual ticket code entry below.', { title: 'Camera Unavailable' });
+          return;
+        }
+
+        if (!window.isSecureContext) {
+          UI.toast('Camera access requires HTTPS (or localhost). Use manual ticket lookup instead.', 'error');
           return;
         }
 
@@ -603,7 +522,10 @@
           console.warn('Camera error:', err);
           cameraStatus.textContent = 'Camera blocked';
           fallbackMsg.style.display = 'block';
-          UI.toast('Camera permission denied or camera unavailable. Please use manual code input.', 'error');
+          const message = err.name === 'NotAllowedError'
+            ? 'Camera permission was denied. Allow camera access or use manual ticket lookup.'
+            : 'Camera unavailable. Use manual ticket lookup or try another camera.';
+          UI.toast(message, 'error');
         }
       }
 
@@ -625,27 +547,46 @@
       }
 
       function startScannerLoop() {
-        if (!barcodeDetector) {
-          // If native BarcodeDetector not available, keep laser running and allow manual code entry
+        if (!barcodeDetector && typeof jsQR !== 'function') {
+          UI.toast('QR scanning is unavailable in this browser. Use manual ticket lookup.', 'error');
           return;
         }
 
         scanInterval = setInterval(async () => {
-          if (!videoEl || videoEl.readyState !== videoEl.HAVE_ENOUGH_DATA) return;
+          if (scanFrameInProgress || scanRequestInProgress ||
+              !videoEl || videoEl.readyState !== videoEl.HAVE_ENOUGH_DATA) return;
+          scanFrameInProgress = true;
           try {
-            const barcodes = await barcodeDetector.detect(videoEl);
-            if (barcodes && barcodes.length) {
-              const code = barcodes[0].rawValue;
+            let code = null;
+            if (barcodeDetector) {
+              const barcodes = await barcodeDetector.detect(videoEl);
+              if (barcodes && barcodes.length) code = barcodes[0].rawValue;
+            } else {
+              const width = videoEl.videoWidth;
+              const height = videoEl.videoHeight;
+              if (!width || !height || !scanContext) return;
+              scanCanvas.width = width;
+              scanCanvas.height = height;
+              scanContext.drawImage(videoEl, 0, 0, width, height);
+              const frame = scanContext.getImageData(0, 0, width, height);
+              const decoded = jsQR(frame.data, width, height, { inversionAttempts: 'dontInvert' });
+              if (decoded) code = decoded.data;
+            }
+            if (code) {
               const now = Date.now();
-              // Prevent firing repeatedly on the exact same scan within 3 seconds
               if (code !== lastScannedCode || now - lastScanTimestamp > 3000) {
                 lastScannedCode = code;
                 lastScanTimestamp = now;
-                UI.toast('QR code scanned!', 'info');
-                handleVerify(code, 'QR_SCAN');
+                scanRequestInProgress = true;
+                handleVerify(code, 'QR_SCAN').finally(() => { scanRequestInProgress = false; });
               }
             }
-          } catch (_e) {}
+          } catch (err) {
+            if (barcodeDetector) barcodeDetector = null;
+            console.warn('QR frame could not be decoded:', err);
+          } finally {
+            scanFrameInProgress = false;
+          }
         }, 250);
       }
 

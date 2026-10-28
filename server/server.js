@@ -26,6 +26,7 @@ app.get(['/myspace', '/myspace.html'], (req, res) => res.redirect(301, '/dashboa
 // Static frontend
 const clientDir = path.join(__dirname, '..', 'client');
 app.use(express.static(clientDir, { extensions: ['html'] }));
+app.get('/vendor/jsqr.js', (_req, res) => res.sendFile(require.resolve('jsqr')));
 // Uploaded files served as static attachments (never executed)
 app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
   setHeaders: (res, filePath) => {

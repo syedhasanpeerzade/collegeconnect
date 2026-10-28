@@ -140,6 +140,16 @@ async function run() {
       body: { event_id: event1.id, ticket_code: ticketCode1 },
     });
     check('unauthorized coordinator cannot verify ticket for unassigned event (403)', unauthVerifyRes.status === 403);
+    const { res: unauthScanRes } = await api('POST', '/api/tickets/scan', {
+      token: coordinator.token,
+      body: { event_id: event1.id, ticket_code: ticketCode1 },
+    });
+    check('unauthorized coordinator cannot scan tickets for an unassigned event (403)', unauthScanRes.status === 403);
+    const { res: studentScanRes } = await api('POST', '/api/tickets/scan', {
+      token: student.token,
+      body: { event_id: event1.id, ticket_code: ticketCode1 },
+    });
+    check('students cannot access coordinator scan endpoint (403)', studentScanRes.status === 403);
 
     // 7. Admin assigns coordinator to event 1
     const { res: assignRes, data: assignData } = await api('POST', `/api/tickets/events/${event1.id}/coordinators`, {
@@ -189,17 +199,42 @@ async function run() {
       invRes.status === 200 && invData.data && invData.data.result === 'INVALID'
     );
 
-    // 12. Step 7 & 8: Coordinator confirms entry
-    const { res: confirmRes, data: confirmData } = await api('POST', '/api/tickets/confirm-entry', {
+    // 12. Check-in is authoritative and atomic, even for simultaneous scans.
+    const scanAttempts = await Promise.all([
+      api('POST', '/api/tickets/scan', {
+        token: coordinator.token,
+        body: { event_id: event1.id, ticket_code: ticketCode1, scan_method: 'QR_SCAN' },
+      }),
+      api('POST', '/api/tickets/scan', {
+        token: coordinator.token,
+        body: { event_id: event1.id, ticket_id: matchedTicket.id, scan_method: 'MANUAL_CODE' },
+      }),
+    ]);
+    const scanResults = scanAttempts.map((attempt) => attempt.data && attempt.data.data && attempt.data.data.result);
+    const approvedScan = scanAttempts.find((attempt) =>
+      attempt.data && attempt.data.data && attempt.data.data.result === 'APPROVED_ENTRY_ALLOWED');
+    const duplicateScan = scanAttempts.find((attempt) =>
+      attempt.data && attempt.data.data && attempt.data.data.result === 'ALREADY_CHECKED_IN');
+    check('coordinator scan records entry and returns the approved student/event details',
+      approvedScan && approvedScan.res.status === 200 &&
+      approvedScan.data.data.checked_in_at &&
+      approvedScan.data.data.ticket.student_name &&
+      approvedScan.data.data.ticket.event_title &&
+      approvedScan.data.data.ticket.registration_status === 'REGISTERED'
+    );
+    check('simultaneous scans admit only once and report the second scan as already checked in',
+      scanAttempts.every((attempt) => attempt.res.status === 200) &&
+      scanResults.includes('APPROVED_ENTRY_ALLOWED') &&
+      scanResults.includes('ALREADY_CHECKED_IN') &&
+      scanResults.length === 2
+    );
+
+    const { res: invalidScanRes, data: invalidScanData } = await api('POST', '/api/tickets/scan', {
       token: coordinator.token,
-      body: {
-        event_id: event1.id,
-        ticket_code: ticketCode1,
-        scan_method: 'QR_SCAN',
-      },
+      body: { event_id: event1.id, ticket_code: 'CC-TKT-FAKE-999-XYZ' },
     });
-    check('coordinator confirmed entry -> DB records check-in',
-      confirmRes.status === 200 && confirmData.success && confirmData.data.checked_in_at
+    check('scan endpoint clearly rejects an invalid QR code',
+      invalidScanRes.status === 200 && invalidScanData.data.result === 'INVALID_QR_CODE'
     );
 
     // 13. Step 9: Student ticket status updates to CHECKED_IN
@@ -244,6 +279,14 @@ async function run() {
     const studentInList = attendees.find((a) => a.ticket_code === ticketCode1);
     check('attendee list reflects CHECKED_IN status with check-in timestamp and coordinator',
       studentInList && studentInList.ticket_status === 'CHECKED_IN' && studentInList.checked_in_at
+    );
+    check('check-in history includes student, event, timestamp, and approved result',
+      attData.data.recent_logs.some((log) =>
+        log.ticket_code === ticketCode1 &&
+        log.event_title &&
+        log.scanned_at &&
+        log.status === 'APPROVED_ENTRY_ALLOWED'
+      )
     );
 
     // 16. CSV export of attendees

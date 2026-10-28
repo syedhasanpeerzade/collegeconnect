@@ -259,7 +259,12 @@ async function registerStudent(eventId, userId) {
       [eventId, userId]
     );
     if (dupe.length) {
-      if (dupe[0].status === 'REGISTERED') throw new ApiError(409, 'You are already registered for this event');
+      if (dupe[0].status === 'REGISTERED') {
+        throw new ApiError(409, 'You are already registered for this event');
+      }
+      if (dupe[0].status !== 'CANCELLED') {
+        throw new ApiError(409, 'You already have an active or reviewed registration for this event');
+      }
       // previously cancelled -> re-register
       await conn.execute(`UPDATE event_registrations SET status = 'REGISTERED', cancelled_at = NULL, registered_at = NOW() WHERE id = ?`, [dupe[0].id]);
       var regId = dupe[0].id;

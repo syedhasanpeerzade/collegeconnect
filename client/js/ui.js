@@ -191,6 +191,9 @@ const UI = {
       COMPLETED: ['gray', 'Completed'], CANCELLED: ['red', 'Cancelled'],
       // registrations
       REGISTERED: ['green', 'Registered'], CANCELLED: ['red', 'Cancelled'],
+      PENDING_APPROVAL: ['amber', 'Pending Approval'],
+      REJECTED_CANCELLED: ['red', 'Rejected/Cancelled'],
+      VALID: ['green', 'Valid'], CHECKED_IN: ['teal', 'Checked In'], EXPIRED: ['gray', 'Expired'],
       // clubs
       OPEN: ['green', 'Open'], CLOSED: ['red', 'Closed'],
       ACTIVE: ['green', 'Active'], INACTIVE: ['gray', 'Inactive'],

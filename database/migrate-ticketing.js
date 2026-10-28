@@ -1,7 +1,7 @@
 'use strict';
 /**
  * Idempotent migration runner for Two-Sided Event Ticketing System:
- * - Creates event_tickets, event_coordinators, and ticket_checkin_logs
+ * - Creates ticketing tables, check-in history, and backend-only Supabase RLS
  * - Backfills tickets for existing event_registrations
  *
  * Usage: node database/migrate-ticketing.js

@@ -5,6 +5,29 @@ const db = require('../config/db');
 const { ApiError } = require('../utils/ApiError');
 const { notify } = require('../utils/notify');
 
+const COORDINATOR_ROLES = new Set(['ADMIN', 'FACULTY', 'ORGANIZER', 'CLUB_COORDINATOR']);
+
+function ticketIdFromLookup(value) {
+  const lookup = String(value);
+  const id = Number(lookup);
+  return /^\d+$/.test(lookup) && Number.isSafeInteger(id) && id <= 2147483647 ? id : -1;
+}
+
+function ticketDisplayStatus(ticketStatus, registrationStatus, eventDate, endTime) {
+  const registration = String(registrationStatus || '').toUpperCase();
+  const ticket = String(ticketStatus || '').toUpperCase();
+  if (['PENDING', 'PENDING_APPROVAL', 'UNDER_REVIEW'].includes(registration) ||
+      ['PENDING', 'PENDING_APPROVAL', 'UNDER_REVIEW'].includes(ticket)) return 'PENDING_APPROVAL';
+  if (registration === 'REJECTED' || ticket === 'REJECTED') return 'REJECTED';
+  if (registration === 'CANCELLED') return 'CANCELLED';
+
+  if (ticket === 'VALID' && eventDate) {
+    const eventEnd = new Date(`${eventDate}T${endTime || '23:59:59'}`);
+    if (eventEnd < new Date()) return 'EXPIRED';
+  }
+  return ticket;
+}
+
 function generateTicketCode(eventId, regId) {
   const rand = crypto.randomBytes(3).toString('hex').toUpperCase();
   return `CC-TKT-${eventId}-${regId}-${rand}`;
@@ -68,14 +91,14 @@ async function cancelTicketByRegistration(conn, registrationId, reason = 'Studen
  * Check if a user is authorized to coordinate an event.
  */
 async function isUserEventCoordinator(eventId, user) {
-  if (!user) return false;
-  if (user.role === 'ADMIN') return true;
+  if (!user || !COORDINATOR_ROLES.has(user.role)) return false;
 
   const [evRows] = await db.execute(
     `SELECT id, organizer_id, club_id FROM events WHERE id = ?`,
     [eventId]
   );
   if (!evRows.length) return false;
+  if (user.role === 'ADMIN') return true;
   const ev = evRows[0];
 
   if (ev.organizer_id === user.id) return true;
@@ -105,7 +128,7 @@ async function isUserEventCoordinator(eventId, user) {
 async function getMyTickets(userId) {
   const [rows] = await db.execute(
     `SELECT t.id, t.ticket_code, t.status, t.checked_in_at, t.cancelled_at, t.created_at,
-            r.public_id AS registration_number, r.registered_at,
+            r.public_id AS registration_number, r.registered_at, r.status AS registration_status,
             e.id AS event_id, e.title AS event_title, e.event_date, e.start_time, e.end_time,
             e.venue, e.category, e.poster_path,
             u.full_name AS student_name, u.student_id AS student_reg_no, u.email AS student_email,
@@ -120,20 +143,11 @@ async function getMyTickets(userId) {
     [userId]
   );
 
-  const now = new Date();
   const withQr = await Promise.all(rows.map(async (row) => {
-    // Check if event end time passed and status is still VALID
-    let displayStatus = row.status;
-    if (displayStatus === 'VALID' && row.event_date) {
-      const endStr = row.end_time ? `${row.event_date}T${row.end_time}` : `${row.event_date}T23:59:59`;
-      if (new Date(endStr) < now) {
-        displayStatus = 'EXPIRED';
-      }
-    }
     const qrDataUrl = await generateQrDataUrl(row.ticket_code);
     return {
       ...row,
-      status: displayStatus,
+      status: ticketDisplayStatus(row.status, row.registration_status, row.event_date, row.end_time),
       raw_status: row.status,
       qr_data_url: qrDataUrl,
     };
@@ -149,6 +163,7 @@ async function getTicketById(ticketId, user) {
   const [rows] = await db.execute(
     `SELECT t.id, t.ticket_code, t.status, t.checked_in_at, t.cancelled_at, t.cancelled_reason,
             t.created_at, r.public_id AS registration_number, r.registered_at,
+            r.status AS registration_status,
             e.id AS event_id, e.title AS event_title, e.event_date, e.start_time, e.end_time,
             e.venue, e.category, e.poster_path, e.organizer_id,
             u.id AS student_id_val, u.full_name AS student_name, u.student_id AS student_reg_no,
@@ -175,13 +190,21 @@ async function getTicketById(ticketId, user) {
   }
 
   const qrDataUrl = await generateQrDataUrl(t.ticket_code);
-  return { ...t, qr_data_url: qrDataUrl };
+  return {
+    ...t,
+    status: ticketDisplayStatus(t.status, t.registration_status, t.event_date, t.end_time),
+    qr_data_url: qrDataUrl,
+  };
 }
 
 /**
  * List events assigned to the coordinator (or all events for admin).
  */
 async function getCoordinatorEvents(user) {
+  if (!user || !COORDINATOR_ROLES.has(user.role)) {
+    throw new ApiError(403, 'Only authorized event coordinators can view assigned events');
+  }
+
   let sql;
   let params = [];
 
@@ -246,10 +269,12 @@ async function verifyTicket(eventId, ticketCode, coordinatorUser) {
   const [tRows] = await db.execute(
     `SELECT t.id, t.ticket_code, t.status, t.checked_in_at, t.cancelled_at, t.cancelled_reason,
             t.event_id, e.title AS event_title, e.event_date, e.start_time, e.end_time, e.venue,
+            r.status AS registration_status,
             u.id AS student_id, u.full_name AS student_name, u.student_id AS student_reg_no,
             u.email AS student_email, d.name AS department_name,
             c.full_name AS checked_in_by_name
      FROM event_tickets t
+     JOIN event_registrations r ON r.id = t.registration_id
      JOIN events e ON e.id = t.event_id
      JOIN users u ON u.id = t.student_id
      LEFT JOIN departments d ON d.id = u.department_id
@@ -323,8 +348,30 @@ async function verifyTicket(eventId, ticketCode, coordinatorUser) {
     };
   }
 
+  if (['PENDING', 'PENDING_APPROVAL', 'UNDER_REVIEW'].includes(String(t.registration_status || '').toUpperCase()) ||
+      ['PENDING', 'PENDING_APPROVAL', 'UNDER_REVIEW'].includes(String(t.status || '').toUpperCase())) {
+    await db.execute(
+      `INSERT INTO ticket_checkin_logs (ticket_id, event_id, student_id, coordinator_id, scan_method, status, notes)
+       VALUES (?, ?, ?, ?, 'SCAN_OR_INPUT', 'PENDING_APPROVAL', 'Registration or ticket requires approval')`,
+      [t.id, eventId, t.student_id, coordinatorUser.id]
+    );
+    return {
+      result: 'PENDING_APPROVAL',
+      message: 'PENDING APPROVAL — ENTRY DENIED',
+      valid: false,
+      can_confirm: false,
+      ticket: {
+        ticket_code: t.ticket_code,
+        student_name: t.student_name,
+        registration_status: t.registration_status,
+        event_title: t.event_title,
+      },
+    };
+  }
+
   // 4. Cancelled ticket
-  if (t.status === 'CANCELLED') {
+  if (['CANCELLED', 'REJECTED'].includes(String(t.status || '').toUpperCase()) ||
+      ['CANCELLED', 'REJECTED'].includes(String(t.registration_status || '').toUpperCase())) {
     await db.execute(
       `INSERT INTO ticket_checkin_logs (ticket_id, event_id, student_id, coordinator_id, scan_method, status, notes)
        VALUES (?, ?, ?, ?, 'SCAN_OR_INPUT', 'CANCELLED', ?)`,
@@ -361,6 +408,15 @@ async function verifyTicket(eventId, ticketCode, coordinatorUser) {
     };
   }
 
+  if (String(t.registration_status || '').toUpperCase() !== 'REGISTERED' || t.status !== 'VALID') {
+    return {
+      result: 'INVALID',
+      message: 'INVALID TICKET — REGISTRATION OR TICKET IS NOT VALID',
+      valid: false,
+      can_confirm: false,
+    };
+  }
+
   // 6. Valid unused ticket
   return {
     result: 'VALID',
@@ -385,6 +441,241 @@ async function verifyTicket(eventId, ticketCode, coordinatorUser) {
 }
 
 /**
+ * Validate and check in a ticket in one transaction. The registration is
+ * locked before the ticket, matching the student cancellation workflow.
+ */
+async function scanTicket(eventId, ticketCodeOrId, coordinatorUser, scanMethod = 'QR_SCAN') {
+  if (!eventId) throw new ApiError(400, 'Event ID is required');
+  if (!ticketCodeOrId) throw new ApiError(400, 'Ticket code or ID is required');
+
+  const isCoord = await isUserEventCoordinator(eventId, coordinatorUser);
+  if (!isCoord) {
+    throw new ApiError(403, 'You are not authorized to check in attendees for this event');
+  }
+
+  const lookup = String(ticketCodeOrId).trim();
+  const ticketId = ticketIdFromLookup(lookup);
+  const method = ['QR_SCAN', 'MANUAL_CODE', 'TABLE_VERIFY'].includes(scanMethod)
+    ? scanMethod : 'QR_SCAN';
+  const conn = await db.getConnection();
+
+  try {
+    await conn.beginTransaction();
+
+    const [matches] = await conn.execute(
+      `SELECT id, registration_id
+       FROM event_tickets
+       WHERE id = ? OR UPPER(ticket_code) = UPPER(?)
+       LIMIT 1`,
+      [ticketId, lookup]
+    );
+
+    const recordScan = async (status, matchedTicketId = null, studentId = null, notes = null) => {
+      await conn.execute(
+        `INSERT INTO ticket_checkin_logs (ticket_id, event_id, student_id, coordinator_id, scan_method, status, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [matchedTicketId, eventId, studentId, coordinatorUser.id, method, status, notes]
+      );
+    };
+
+    if (!matches.length) {
+      await recordScan('INVALID_QR_CODE', null, null, 'No matching ticket was found');
+      await conn.commit();
+      return {
+        result: 'INVALID_QR_CODE',
+        message: 'INVALID QR CODE',
+        valid: false,
+        can_confirm: false,
+      };
+    }
+
+    // Lock in the same order as registration cancellation/re-registration.
+    const [registrations] = await conn.execute(
+      `SELECT id, event_id, student_id, public_id, status
+       FROM event_registrations
+       WHERE id = ?
+       FOR UPDATE`,
+      [matches[0].registration_id]
+    );
+    const [tickets] = await conn.execute(
+      `SELECT t.id, t.ticket_code, t.status, t.event_id, t.student_id,
+              t.checked_in_at, t.cancelled_at, t.cancelled_reason,
+              e.title AS event_title, e.event_date, e.end_time, e.venue, e.is_published,
+              e.status AS event_status,
+              u.full_name AS student_name, u.student_id AS student_reg_no,
+              u.email AS student_email, d.name AS department_name,
+              c.full_name AS checked_in_by_name
+       FROM event_tickets t
+       JOIN events e ON e.id = t.event_id
+       JOIN users u ON u.id = t.student_id
+       LEFT JOIN departments d ON d.id = u.department_id
+       LEFT JOIN users c ON c.id = t.checked_in_by
+       WHERE t.id = ?
+       FOR UPDATE OF t`,
+      [matches[0].id]
+    );
+
+    if (!registrations.length || !tickets.length) {
+      throw new ApiError(409, 'Ticket registration changed while scanning. Please scan again.');
+    }
+
+    const registration = registrations[0];
+    const ticket = tickets[0];
+    const registrationStatus = String(registration.status || '').toUpperCase();
+    const ticketStatus = String(ticket.status || '').toUpperCase();
+    const details = {
+      id: ticket.id,
+      ticket_id: ticket.id,
+      ticket_code: ticket.ticket_code,
+      status: ticket.status,
+      registration_status: registration.status,
+      registration_number: registration.public_id,
+      student_id: ticket.student_id,
+      student_name: ticket.student_name,
+      student_reg_no: ticket.student_reg_no,
+      student_email: ticket.student_email,
+      department_name: ticket.department_name,
+      event_id: ticket.event_id,
+      event_title: ticket.event_title,
+      event_date: ticket.event_date,
+      venue: ticket.venue,
+    };
+
+    if (Number(ticket.event_id) !== Number(eventId) ||
+        Number(registration.event_id) !== Number(eventId) ||
+        Number(registration.student_id) !== Number(ticket.student_id)) {
+      await recordScan('INVALID_QR_CODE', null, null, 'Ticket does not match the selected event');
+      await conn.commit();
+      return {
+        result: 'INVALID_QR_CODE',
+        message: 'INVALID QR CODE — TICKET IS NOT FOR THIS EVENT',
+        valid: false,
+        can_confirm: false,
+      };
+    }
+
+    if (ticketStatus === 'CHECKED_IN') {
+      await recordScan('ALREADY_CHECKED_IN', ticket.id, ticket.student_id, 'Ticket was already used');
+      await conn.commit();
+      return {
+        result: 'ALREADY_CHECKED_IN',
+        message: 'ALREADY CHECKED IN',
+        valid: false,
+        can_confirm: false,
+        checked_in_at: ticket.checked_in_at,
+        checked_in_by: ticket.checked_in_by_name || 'Coordinator',
+        ticket: details,
+      };
+    }
+
+    if (!ticket.is_published || ['CANCELLED', 'COMPLETED'].includes(ticket.event_status)) {
+      await recordScan('INVALID_QR_CODE', ticket.id, ticket.student_id, 'Event is not available for entry');
+      await conn.commit();
+      return {
+        result: 'INVALID_QR_CODE',
+        message: 'INVALID QR CODE — EVENT IS NOT AVAILABLE',
+        valid: false,
+        can_confirm: false,
+        ticket: details,
+      };
+    }
+
+    if (['PENDING', 'PENDING_APPROVAL', 'UNDER_REVIEW'].includes(registrationStatus) ||
+        ['PENDING', 'PENDING_APPROVAL', 'UNDER_REVIEW'].includes(ticketStatus)) {
+      await recordScan('PENDING_APPROVAL', ticket.id, ticket.student_id, 'Registration or ticket requires approval');
+      await conn.commit();
+      return {
+        result: 'PENDING_APPROVAL',
+        message: 'PENDING APPROVAL — ENTRY DENIED',
+        valid: false,
+        can_confirm: false,
+        ticket: details,
+      };
+    }
+
+    if (['CANCELLED', 'REJECTED'].includes(registrationStatus) ||
+        ['CANCELLED', 'REJECTED'].includes(ticketStatus)) {
+      await recordScan('REJECTED_CANCELLED', ticket.id, ticket.student_id, 'Registration or ticket is rejected/cancelled');
+      await conn.commit();
+      return {
+        result: 'REJECTED_CANCELLED',
+        message: 'REJECTED/CANCELLED — ENTRY DENIED',
+        valid: false,
+        can_confirm: false,
+        ticket: details,
+      };
+    }
+
+    const eventEnd = ticket.event_date
+      ? new Date(`${ticket.event_date}T${ticket.end_time || '23:59:59'}`)
+      : null;
+    if (ticketStatus === 'EXPIRED' || (eventEnd && eventEnd < new Date())) {
+      await recordScan('INVALID_QR_CODE', ticket.id, ticket.student_id, 'Ticket has expired');
+      await conn.commit();
+      return {
+        result: 'INVALID_QR_CODE',
+        message: 'INVALID QR CODE — TICKET EXPIRED',
+        valid: false,
+        can_confirm: false,
+        ticket: details,
+      };
+    }
+
+    if (registrationStatus !== 'REGISTERED' || ticketStatus !== 'VALID') {
+      await recordScan('INVALID_QR_CODE', ticket.id, ticket.student_id, `Unsupported ticket or registration status`);
+      await conn.commit();
+      return {
+        result: 'INVALID_QR_CODE',
+        message: 'INVALID QR CODE — TICKET IS NOT VALID',
+        valid: false,
+        can_confirm: false,
+        ticket: details,
+      };
+    }
+
+    const [updated, checkedInRows] = await conn.execute(
+      `UPDATE event_tickets
+       SET status = 'CHECKED_IN', checked_in_at = CURRENT_TIMESTAMP,
+           checked_in_by = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND event_id = ? AND status = 'VALID'
+       RETURNING checked_in_at`,
+      [coordinatorUser.id, ticket.id, eventId]
+    );
+
+    if (updated.affectedRows !== 1) {
+      throw new ApiError(409, 'Ticket check-in conflict. Please scan the ticket again.');
+    }
+
+    await recordScan('APPROVED_ENTRY_ALLOWED', ticket.id, ticket.student_id);
+    await notify(conn, {
+      recipientId: ticket.student_id,
+      type: 'TICKET_CHECKED_IN',
+      title: 'Ticket Checked In',
+      message: `Your entry for "${ticket.event_title}" has been confirmed! Enjoy the event.`,
+      relatedType: 'EVENT',
+      relatedId: eventId,
+      link: '/my-tickets.html',
+    });
+    await conn.commit();
+
+    return {
+      result: 'APPROVED_ENTRY_ALLOWED',
+      message: 'APPROVED — ENTRY ALLOWED',
+      valid: true,
+      can_confirm: false,
+      checked_in_at: checkedInRows[0].checked_in_at,
+      checked_in_by: coordinatorUser.name || coordinatorUser.full_name || 'Coordinator',
+      ticket: { ...details, status: 'CHECKED_IN' },
+    };
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
+/**
  * Verification workflow (step 2):
  * Coordinator clicks "Confirm Entry".
  * Atomic check-in and database record.
@@ -403,25 +694,55 @@ async function confirmEntry(eventId, ticketCodeOrId, coordinatorUser, scanMethod
   try {
     await conn.beginTransaction();
 
-    // Lock ticket row for update
+    const lookupId = ticketIdFromLookup(lookup);
+    const [matches] = await conn.execute(
+      `SELECT id, registration_id
+       FROM event_tickets
+       WHERE id = ? OR UPPER(ticket_code) = UPPER(?)
+       LIMIT 1`,
+      [lookupId, lookup]
+    );
+    if (!matches.length) throw new ApiError(404, 'Ticket not found');
+
+    const [registrations] = await conn.execute(
+      `SELECT id, event_id, student_id, status
+       FROM event_registrations
+       WHERE id = ?
+       FOR UPDATE`,
+      [matches[0].registration_id]
+    );
     const [tRows] = await conn.execute(
       `SELECT t.id, t.ticket_code, t.status, t.event_id, t.student_id, t.checked_in_at,
-              e.title AS event_title, u.full_name AS student_name, u.student_id AS student_reg_no
+              e.title AS event_title, e.event_date, e.end_time, e.is_published,
+              e.status AS event_status,
+              u.full_name AS student_name, u.student_id AS student_reg_no
        FROM event_tickets t
        JOIN events e ON e.id = t.event_id
        JOIN users u ON u.id = t.student_id
-       WHERE (t.id = ? OR UPPER(t.ticket_code) = UPPER(?)) FOR UPDATE`,
-      [isNaN(Number(lookup)) ? -1 : Number(lookup), lookup]
+       WHERE t.id = ?
+       FOR UPDATE OF t`,
+      [matches[0].id]
     );
 
-    if (!tRows.length) {
+    if (!tRows.length || !registrations.length) {
       throw new ApiError(404, 'Ticket not found');
     }
 
     const t = tRows[0];
+    const registration = registrations[0];
 
     if (Number(t.event_id) !== Number(eventId)) {
       throw new ApiError(400, `Ticket is for another event: "${t.event_title}"`);
+    }
+
+    if (Number(registration.event_id) !== Number(eventId) ||
+        Number(registration.student_id) !== Number(t.student_id) ||
+        String(registration.status || '').toUpperCase() !== 'REGISTERED') {
+      throw new ApiError(400, 'Ticket registration is not approved for entry');
+    }
+
+    if (!t.is_published || ['CANCELLED', 'COMPLETED'].includes(t.event_status)) {
+      throw new ApiError(400, 'Event is not available for entry');
     }
 
     if (t.status === 'CHECKED_IN') {
@@ -430,6 +751,11 @@ async function confirmEntry(eventId, ticketCodeOrId, coordinatorUser, scanMethod
 
     if (t.status === 'CANCELLED') {
       throw new ApiError(400, 'Ticket has been cancelled');
+    }
+
+    const eventEnd = t.event_date ? new Date(`${t.event_date}T${t.end_time || '23:59:59'}`) : null;
+    if (t.status === 'EXPIRED' || (eventEnd && eventEnd < new Date())) {
+      throw new ApiError(400, 'Ticket has expired');
     }
 
     // Atomic update
@@ -503,7 +829,13 @@ async function getEventAttendees(eventId, user, { search = '', status = '' } = {
 
   // Base query for attendees
   let sql = `
-    SELECT t.id AS ticket_id, t.ticket_code, t.status AS ticket_status, t.checked_in_at,
+    SELECT t.id AS ticket_id, t.ticket_code,
+           CASE
+             WHEN r.status IN ('PENDING', 'PENDING_APPROVAL', 'UNDER_REVIEW') THEN 'PENDING_APPROVAL'
+             WHEN r.status = 'REJECTED' OR t.status = 'REJECTED' THEN 'REJECTED_CANCELLED'
+             ELSE t.status
+           END AS ticket_status,
+           r.status AS registration_status, t.checked_in_at,
            r.id AS registration_id, r.public_id AS registration_number, r.registered_at,
            u.id AS student_id, u.full_name AS student_name, u.student_id AS student_reg_no,
            u.email AS student_email, u.phone AS student_phone,
@@ -520,18 +852,22 @@ async function getEventAttendees(eventId, user, { search = '', status = '' } = {
 
   if (status) {
     if (status === 'CHECKED_IN') {
-      sql += ` AND t.status = 'CHECKED_IN'`;
+      sql += ` AND t.status = 'CHECKED_IN' AND r.status = 'REGISTERED'`;
     } else if (status === 'VALID') {
-      sql += ` AND t.status = 'VALID'`;
+      sql += ` AND t.status = 'VALID' AND r.status = 'REGISTERED'`;
     } else if (status === 'CANCELLED') {
       sql += ` AND (t.status = 'CANCELLED' OR r.status = 'CANCELLED')`;
+    } else if (status === 'PENDING_APPROVAL') {
+      sql += ` AND (t.status IN ('PENDING', 'PENDING_APPROVAL', 'UNDER_REVIEW') OR r.status IN ('PENDING', 'PENDING_APPROVAL', 'UNDER_REVIEW'))`;
+    } else if (status === 'REJECTED_CANCELLED') {
+      sql += ` AND (r.status IN ('REJECTED', 'CANCELLED') OR t.status IN ('REJECTED', 'CANCELLED'))`;
     }
   }
 
   if (search) {
-    sql += ` AND (u.full_name ILIKE ? OR u.student_id ILIKE ? OR u.email ILIKE ? OR t.ticket_code ILIKE ?)`;
+    sql += ` AND (u.full_name ILIKE ? OR u.student_id ILIKE ? OR u.email ILIKE ? OR t.ticket_code ILIKE ? OR r.public_id ILIKE ?)`;
     const s = `%${search}%`;
-    params.push(s, s, s, s);
+    params.push(s, s, s, s, s);
   }
 
   sql += ` ORDER BY t.checked_in_at DESC NULLS LAST, r.registered_at ASC`;
@@ -543,7 +879,11 @@ async function getEventAttendees(eventId, user, { search = '', status = '' } = {
     `SELECT
        (SELECT COUNT(*) FROM event_registrations WHERE event_id = ? AND status = 'REGISTERED') AS total_registered,
        (SELECT COUNT(*) FROM event_tickets WHERE event_id = ? AND status = 'CHECKED_IN') AS checked_in,
-       (SELECT COUNT(*) FROM event_tickets WHERE event_id = ? AND status = 'CANCELLED') AS cancelled
+       (SELECT COUNT(*)
+        FROM event_registrations r
+        LEFT JOIN event_tickets t ON t.registration_id = r.id
+        WHERE r.event_id = ?
+          AND (r.status IN ('CANCELLED', 'REJECTED') OR t.status IN ('CANCELLED', 'REJECTED'))) AS cancelled
     `,
     [eventId, eventId, eventId]
   );
@@ -557,9 +897,10 @@ async function getEventAttendees(eventId, user, { search = '', status = '' } = {
   const [recentLogs] = await db.execute(
     `SELECT l.id, l.scanned_at, l.scan_method, l.status, l.notes,
             u.full_name AS student_name, u.student_id AS student_reg_no,
-            c.full_name AS coordinator_name, t.ticket_code
+            c.full_name AS coordinator_name, t.ticket_code, e.title AS event_title
      FROM ticket_checkin_logs l
      JOIN users c ON c.id = l.coordinator_id
+     JOIN events e ON e.id = l.event_id
      LEFT JOIN event_tickets t ON t.id = l.ticket_id
      LEFT JOIN users u ON u.id = l.student_id
      WHERE l.event_id = ?
@@ -639,6 +980,9 @@ async function assignCoordinator(eventId, targetUserId, user) {
     [targetUserId]
   );
   if (!targetUser.length) throw new ApiError(404, 'User not found');
+  if (!COORDINATOR_ROLES.has(targetUser[0].role)) {
+    throw new ApiError(400, 'Only faculty, organizers, and coordinators can be assigned to event entry');
+  }
 
   await db.execute(
     `INSERT INTO event_coordinators (event_id, user_id, assigned_by)
@@ -761,6 +1105,7 @@ module.exports = {
   getTicketById,
   getCoordinatorEvents,
   verifyTicket,
+  scanTicket,
   confirmEntry,
   getEventAttendees,
   exportEventAttendeesCSV,

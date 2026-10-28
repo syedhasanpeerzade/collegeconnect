@@ -25,7 +25,7 @@ CollegeConnect replaces scattered notice boards, WhatsApp groups, and paper form
 - **Frontend:** HTML5, CSS3, vanilla JavaScript (Fetch API), responsive layout — no frameworks
 - **Backend:** Node.js, Express.js, REST APIs, MVC-style structure with a service layer
 - **Database:** PostgreSQL (hosted on Supabase), accessed through `pg` with a thin mysql2-style adapter (`server/config/db.js`) that keeps the service SQL simple; transactions, foreign keys, unique constraints, indexes
-- **Packages:** express, pg, bcryptjs, jsonwebtoken, multer, cors, dotenv, qrcode, express-validator, helmet, morgan
+- **Packages:** express, pg, bcryptjs, jsonwebtoken, multer, cors, dotenv, qrcode, jsqr, express-validator, helmet, morgan
 
 > **Note on the database:** the original specification called for MySQL. MySQL was unavailable in the target environment, so the data layer was ported to PostgreSQL hosted on Supabase. Application SQL remains simple and readable; MySQL-only expressions (CURDATE, GROUP_CONCAT, DATE_FORMAT, etc.) are translated centrally in `server/config/db.js`. All schema constraints (PKs, FKs, UNIQUE, CHECK, indexes) have Postgres equivalents.
 
@@ -122,6 +122,23 @@ DELETE /api/events/:id/register           cancel registration
 GET    /api/events/:id/registrations      organizer/faculty/admin view
 GET    /api/my-registrations              the student's registrations
 ```
+
+### Event coordinator check-in
+```
+GET    /api/tickets/coordinator/events                 assigned events and live attendance
+POST   /api/tickets/scan                               authoritative validation + atomic check-in
+GET    /api/tickets/events/:eventId/attendees          searchable roster, attendance, and scan history
+GET    /api/tickets/events/:eventId/export             authorized attendee CSV
+```
+The coordinator dashboard is `/coordinator/event-checkin.html`. It scans the existing student ticket QR,
+or accepts a ticket code/ID manually. A scan is validated and recorded in one server transaction; in the
+existing registration workflow, `REGISTERED` is the approved state, and only it with a `VALID` ticket is
+admitted. Pending, rejected, cancelled,
+expired, wrong-event, and already-used passes are denied. Ticket and registration records are locked
+before the check-in update, so concurrent scans cannot admit the same pass twice. Coordinator access is
+restricted to assigned/owned events (or administrators), and the student registration flow is unchanged.
+Camera scanning requires HTTPS (except localhost); online access is required for every authoritative
+validation and check-in.
 
 Events discovery: `/events.html` opens an Events Categories page (8 clickable cards with
 live upcoming counts: Sports, Coding & Tech, College Clubs, Cultural, Academic,
@@ -241,6 +258,9 @@ The QR code encodes **only** the events page URL (`APP_URL/events`) — never a 
 - bcryptjs password hashing (10 rounds); JWT (7 day expiry) with `authenticate` and `authorize(...roles)` middleware
 - express-validator on all write endpoints; parameterized SQL everywhere
 - helmet security headers; CORS restricted by `CORS_ORIGIN`; 1 MB body limit
+- Coordinator check-in validates assignments and database state on the server; Supabase `anon` and
+  `authenticated` roles are denied direct access to registration, ticket, assignment, and check-in tables
+  by the idempotent ticketing migration. Browser check-in always goes through the authenticated API.
 - Multer uploads: MIME + extension allow-list, 5 MB cap, random safe filenames, files served as static attachments with script types neutralized
 - No password hashes, secrets, or stack traces in responses
 

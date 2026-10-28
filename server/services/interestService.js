@@ -124,7 +124,7 @@ async function recommendedEvents(userId, { limit = 6 } = {}) {
      WHERE e.is_published = 1 AND e.status IN ('SCHEDULED','ONGOING')
        AND (e.event_date > CURRENT_DATE OR (e.event_date = CURRENT_DATE AND e.end_time >= CURRENT_TIME))
        AND e.category IN (${placeholders})
-       AND NOT EXISTS (SELECT 1 FROM event_registrations mr WHERE mr.event_id = e.id AND mr.student_id = ? AND mr.status = 'REGISTERED')
+       AND NOT EXISTS (SELECT 1 FROM event_registrations mr WHERE mr.event_id = e.id AND mr.student_id = ? AND mr.status <> 'CANCELLED')
      ORDER BY e.event_date ASC, e.start_time ASC
      LIMIT ?`,
     [...categories, userId, String(limit)]

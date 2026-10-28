@@ -23,6 +23,13 @@ async function verifyTicket(req, res) {
   ok(res, result.message, result);
 }
 
+async function scanTicket(req, res) {
+  const { event_id, ticket_code, ticket_id, scan_method } = req.body;
+  const lookup = ticket_id || ticket_code;
+  const result = await ticketService.scanTicket(event_id, lookup, req.user, scan_method || 'QR_SCAN');
+  ok(res, result.message, result);
+}
+
 async function confirmEntry(req, res) {
   const { event_id, ticket_code, ticket_id, scan_method } = req.body;
   const lookup = ticket_id || ticket_code;
@@ -81,6 +88,7 @@ module.exports = {
   getTicketById,
   getCoordinatorEvents,
   verifyTicket,
+  scanTicket,
   confirmEntry,
   getEventAttendees,
   exportEventAttendees,

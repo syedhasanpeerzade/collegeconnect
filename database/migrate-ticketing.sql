@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS event_tickets (
   registration_id INTEGER NOT NULL UNIQUE REFERENCES event_registrations(id) ON DELETE CASCADE,
   event_id        INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
   student_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  status          VARCHAR(20) NOT NULL DEFAULT 'VALID' CHECK (status IN ('VALID', 'CHECKED_IN', 'CANCELLED', 'EXPIRED')),
+  status          VARCHAR(24) NOT NULL DEFAULT 'VALID'
+                  CHECK (status IN ('VALID', 'CHECKED_IN', 'CANCELLED', 'EXPIRED', 'PENDING', 'PENDING_APPROVAL', 'UNDER_REVIEW', 'REJECTED')),
   qr_code_data    TEXT NOT NULL,
   checked_in_at   TIMESTAMPTZ NULL,
   checked_in_by   INTEGER NULL REFERENCES users(id) ON DELETE SET NULL,
@@ -53,3 +54,60 @@ CREATE TABLE IF NOT EXISTS ticket_checkin_logs (
 
 CREATE INDEX IF NOT EXISTS idx_checkin_logs_event ON ticket_checkin_logs(event_id, scanned_at);
 CREATE INDEX IF NOT EXISTS idx_checkin_logs_ticket ON ticket_checkin_logs(ticket_id);
+
+-- Widen the existing status constraints without changing the registration
+-- endpoint: new registrations still default to REGISTERED and issue VALID tickets.
+DO $$
+BEGIN
+  ALTER TABLE public.event_registrations ALTER COLUMN status TYPE VARCHAR(24);
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.event_registrations'::regclass
+      AND conname = 'event_registrations_status_check'
+      AND pg_get_constraintdef(oid) LIKE '%PENDING_APPROVAL%'
+  ) THEN
+    ALTER TABLE public.event_registrations
+      DROP CONSTRAINT IF EXISTS event_registrations_status_check;
+    ALTER TABLE public.event_registrations
+      ADD CONSTRAINT event_registrations_status_check
+      CHECK (status IN ('REGISTERED', 'PENDING', 'PENDING_APPROVAL', 'UNDER_REVIEW', 'REJECTED', 'CANCELLED'));
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.event_tickets'::regclass
+      AND conname = 'event_tickets_status_check'
+      AND pg_get_constraintdef(oid) LIKE '%PENDING_APPROVAL%'
+  ) THEN
+    ALTER TABLE public.event_tickets
+      DROP CONSTRAINT IF EXISTS event_tickets_status_check;
+    ALTER TABLE public.event_tickets
+      ADD CONSTRAINT event_tickets_status_check
+      CHECK (status IN ('VALID', 'CHECKED_IN', 'CANCELLED', 'EXPIRED', 'PENDING', 'PENDING_APPROVAL', 'UNDER_REVIEW', 'REJECTED'));
+  END IF;
+END $$;
+
+-- These records are accessed through the authenticated CollegeConnect API,
+-- not directly from a browser Supabase client. Deny direct PostgREST access
+-- to public client roles while allowing the backend database owner/service role.
+DO $$
+DECLARE
+  table_name TEXT;
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon')
+     AND EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+    FOREACH table_name IN ARRAY ARRAY[
+      'event_registrations',
+      'event_tickets',
+      'event_coordinators',
+      'ticket_checkin_logs'
+    ] LOOP
+      EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', table_name);
+      EXECUTE format('DROP POLICY IF EXISTS collegeconnect_backend_only ON public.%I', table_name);
+      EXECUTE format(
+        'CREATE POLICY collegeconnect_backend_only ON public.%I AS RESTRICTIVE FOR ALL TO anon, authenticated USING (false) WITH CHECK (false)',
+        table_name
+      );
+    END LOOP;
+  END IF;
+END $$;
